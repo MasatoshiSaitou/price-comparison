@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>価格比較 v4.0 - 楽天新API対応版</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    min-height: 100vh;
+    color: #1A1A1A;
+    line-height: 1.6;
+    padding: 15px;
+}
+
+.container { max-width: 1400px; margin: 0 auto; }
+
+header {
+    background: linear-gradient(135deg, #FF6B35 0%, #004E89 100%);
+    color: white;
+    padding: 25px 20px;
+    border-radius: 16px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    text-align: center;
+}
+header h1 { font-size: 1.5em; font-weight: 900; margin-bottom: 6px; }
+header .subtitle { font-size: 0.85em; opacity: 0.95; }
+header .version {
+    display: inline-block;
+    background: #FFEB3B;
+    color: #1A1A1A;
+    padding: 3px 12px;
+    border-radius: 12px;
+    font-size: 0.72em;
+    font-weight: 800;
+    margin-top: 8px;
+}
+
+.version-banner {
+    background: #E8F5E9;
+    border: 2px solid #4CAF50;
+    padding: 12px 16px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+    font-size: 0.85em;
+    color: #2E7D32;
+}
+.version-banner strong { color: #1B5E20; }
+
+.config-panel {
+    background: white;
+    padding: 18px;
+    border-radius: 12px;
+    margin-bottom: 15px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    border-left: 4px solid #F7B801;
+}
+.config-panel summary {
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.95em;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.config-panel summary::before { content: '⚙️'; }
+.config-content {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #E0E0E0;
+}
+.config-content p {
+    margin-bottom: 10px;
+    font-size: 0.88em;
+    color: #555;
+}
+.config-content a { color: #FF6B35; text-decoration: none; font-weight: 600; }
+
+.field-group { margin-bottom: 12px; }
+.field-group label {
+    display: block;
+    font-size: 0.85em;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: #333;
+}
+.field-group input {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    font-size: 0.9em;
+    font-family: monospace;
+}
+.field-group input:focus { outline: none; border-color: #FF6B35; }
+.field-hint {
+    font-size: 0.75em;
+    color: #888;
+    margin-top: 3px;
+}
+
+.btn-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.btn {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.92em;
+    transition: all 0.2s;
+}
+.btn-save { background: #06A77D; color: white; flex: 1; }
+.btn-test { background: #004E89; color: white; flex: 1; }
+.btn:hover { transform: translateY(-1px); }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+.config-status {
+    font-size: 0.8em;
+    padding: 4px 10px;
+    border-radius: 6px;
+    display: inline-block;
+    margin-left: 8px;
+}
+.config-status.success { background: rgba(6,167,125,0.15); color: #06A77D; }
+.config-status.warning { background: rgba(247,184,1,0.2); color: #B8860B; }
+
+.current-origin {
+    background: #F0F4FF;
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin: 10px 0;
+    font-size: 0.82em;
+    border-left: 3px solid #004E89;
+}
+.current-origin code {
+    background: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+    color: #D62828;
+    font-weight: 700;
+}
+
+.search-section {
+    background: white;
+    padding: 20px;
+    border-radius: 14px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+.search-group { flex: 1; min-width: 240px; }
+.search-group label {
+    display: block;
+    font-size: 0.85em;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+.search-group input {
+    width: 100%;
+    padding: 12px 14px;
+    border: 2px solid #E0E0E0;
+    border-radius: 10px;
+    font-size: 1em;
+}
+.search-group input:focus { outline: none; border-color: #FF6B35; }
+.search-btn {
+    padding: 12px 30px;
+    background: linear-gradient(135deg, #FF6B35 0%, #FF5722 100%);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.95em;
+}
+.search-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.loading-spinner {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.message {
+    padding: 12px 16px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+    font-size: 0.9em;
+}
+.message.info { background: rgba(0,78,137,0.1); color: #004E89; border-left: 4px solid #004E89; }
+.message.error { background: rgba(214,40,40,0.1); color: #D62828; border-left: 4px solid #D62828; }
+.message.success { background: rgba(6,167,125,0.1); color: #06A77D; border-left: 4px solid #06A77D; }
+.message.warning { background: rgba(247,184,1,0.15); color: #B8860B; border-left: 4px solid #F7B801; }
+
+.debug-info {
+    background: #2D2D2D;
+    color: #00FF00;
+    padding: 12px;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 0.78em;
+    margin-top: 10px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 18px;
+}
+
+.product-card {
+    background: white;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+    transition: all 0.3s;
+}
+.product-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.12);
+}
+
+.product-image-wrap {
+    width: 100%;
+    height: 200px;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+.product-image-wrap img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+.product-image-placeholder { color: #BBB; font-size: 3em; }
+.product-info {
+    padding: 14px;
+    background: linear-gradient(135deg, #FAFAFA 0%, #F3F3F3 100%);
+    border-bottom: 1px solid #E0E0E0;
+}
+.product-title {
+    font-size: 0.92em;
+    font-weight: 700;
+    line-height: 1.4;
+    margin-bottom: 5px;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 3.7em;
+}
+.product-shop { font-size: 0.78em; color: #888; }
+
+.sites-comparison {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.site-card {
+    border: 2px solid #E0E0E0;
+    border-radius: 10px;
+    padding: 12px;
+    background: #FAFAFA;
+}
+.site-card.real-data { border-color: #06A77D; background: rgba(6,167,125,0.03); }
+
+.site-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.site-name {
+    font-weight: 700;
+    font-size: 0.92em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.site-logo {
+    width: 20px; height: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7em;
+    font-weight: 900;
+    color: white;
+}
+.amazon-logo { background: #FF9900; }
+.yahoo-logo { background: #FF0000; }
+.rakuten-logo { background: #BF0000; }
+
+.price-info { display: grid; gap: 4px; font-size: 0.85em; }
+.price-row { display: grid; grid-template-columns: 80px 1fr; gap: 8px; }
+.price-label { color: #888; font-size: 0.85em; }
+.price-value { font-weight: 700; }
+.price-value.main { color: #FF6B35; font-size: 1.1em; }
+.shipping-free { color: #06A77D; font-weight: 600; }
+.shipping-paid { color: #D62828; font-size: 0.85em; }
+
+.points-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #F7B801 0%, #FFA500 100%);
+    color: #1A1A1A;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.8em;
+    font-weight: 700;
+}
+
+.effective-price {
+    background: rgba(6,167,125,0.1);
+    padding: 8px 10px;
+    border-radius: 6px;
+    border-left: 3px solid #06A77D;
+    margin-top: 6px;
+}
+.effective-price-label { font-size: 0.72em; color: #888; }
+.effective-price-value { font-size: 1em; font-weight: 700; color: #06A77D; }
+
+.buy-link {
+    display: block;
+    text-align: center;
+    padding: 8px;
+    background: #FF6B35;
+    color: white !important;
+    text-decoration: none;
+    border-radius: 6px;
+    font-size: 0.82em;
+    font-weight: 600;
+    margin-top: 8px;
+}
+.buy-link:hover { background: #FF5722; }
+
+.no-data {
+    font-size: 0.8em;
+    color: #888;
+    padding: 6px;
+    text-align: center;
+    font-style: italic;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    background: white;
+    border-radius: 14px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+}
+.empty-state-icon { font-size: 3em; margin-bottom: 15px; }
+.empty-state h2 { color: #666; margin-bottom: 8px; font-size: 1.1em; }
+.empty-state p { color: #888; font-size: 0.9em; }
+
+footer {
+    text-align: center;
+    padding: 20px;
+    color: #888;
+    font-size: 0.82em;
+    margin-top: 30px;
+}
+
+@media (max-width: 768px) {
+    body { padding: 10px; }
+    header h1 { font-size: 1.2em; }
+    .search-section { flex-direction: column; }
+    .search-group { min-width: 100%; }
+    .search-btn { width: 100%; }
+    .products-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+    <h1>🛍️ ショッピング価格比較</h1>
+    <div class="subtitle">Amazon・Yahoo!ショッピング・楽天</div>
+    <div class="version">⚡ Version 4.0 - 楽天新API（2026年5月移行版）対応</div>
+</header>
+
+<div class="version-banner">
+    ✅ <strong>Version 4.0</strong>：楽天の新API（openapi.rakuten.co.jp）に対応した最新版です。<br>
+    accessKey も必要になりました。両方を入力してください。
+</div>
+
+<details class="config-panel" id="configPanel" open>
+    <summary>API設定<span id="configStatus"></span></summary>
+    <div class="config-content">
+        <p>
+            <strong>楽天新APIの認証情報</strong>を入力してください。
+            両方とも楽天ウェブサービスの「アプリID発行・管理」画面から取得できます。
+        </p>
+
+        <div class="field-group">
+            <label for="rakutenAppId">アプリケーションID（applicationId）</label>
+            <input type="text" id="rakutenAppId" placeholder="例：6100b1ea-4817-4635-9e96-ba48a1b904">
+            <div class="field-hint">UUID形式（ハイフン付き）</div>
+        </div>
+
+        <div class="field-group">
+            <label for="rakutenAccessKey">アクセスキー（accessKey）</label>
+            <input type="password" id="rakutenAccessKey" placeholder="楽天ウェブサービスで「👁」を押して表示されるキー">
+            <div class="field-hint">アプリ管理画面で「👁」アイコンをクリックすると表示されます</div>
+        </div>
+
+        <div class="current-origin" id="currentOrigin">
+            <strong>📍 現在のOrigin：</strong><code id="originValue">読み込み中...</code><br>
+            <span style="font-size:0.78em; color:#666;">
+                ↑ この値が、楽天アプリの「許可されたWebサイト」と一致する必要があります
+            </span>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-save" onclick="saveCredentials()">💾 保存</button>
+            <button class="btn btn-test" onclick="testConnection()">🔧 接続テスト</button>
+        </div>
+
+        <div id="debugOutput"></div>
+    </div>
+</details>
+
+<div class="search-section">
+    <div class="search-group">
+        <label for="keyword">🔍 検索キーワード</label>
+        <input type="text" id="keyword" placeholder="例：ワイヤレスイヤホン">
+    </div>
+    <button class="search-btn" id="searchBtn" onclick="searchProducts()">
+        <span id="btnText">検索</span>
+    </button>
+</div>
+
+<div id="messageContainer"></div>
+
+<div id="resultsSection">
+    <div class="empty-state">
+        <div class="empty-state-icon">🔍</div>
+        <h2>商品を検索してください</h2>
+        <p>まず⚙️設定パネルで認証情報を入力し、「接続テスト」を実行することをお勧めします</p>
+    </div>
+</div>
+
+<footer>
+    <p>※ 表示価格はAPI取得時点のものです | 楽天新API (openapi.rakuten.co.jp) 経由</p>
+</footer>
+
+</div>
+
+<script>
+console.log('🚀 価格比較アプリ Version 4.0 起動 - 楽天新API対応');
+
+// 楽天新API（2026年5月以降）
+const RAKUTEN_API_URL = 'https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20220601';
+
+let debugLog = [];
+
+function addDebugLog(message) {
+    const timestamp = new Date().toLocaleTimeString('ja-JP');
+    debugLog.push(`[${timestamp}] ${message}`);
+    console.log(message);
+}
+
+function showDebugOutput() {
+    const debugEl = document.getElementById('debugOutput');
+    if (debugLog.length > 0) {
+        debugEl.innerHTML = '<div class="debug-info">' + debugLog.join('\n') + '</div>';
+    }
+}
+
+// 現在のOriginを表示（楽天への登録URLと比較できるように）
+function displayCurrentOrigin() {
+    const origin = window.location.origin === 'null' || window.location.protocol === 'file:'
+        ? 'null（ローカルファイル開き）'
+        : window.location.origin;
+    document.getElementById('originValue').textContent = origin;
+    addDebugLog('現在のOrigin: ' + origin);
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    addDebugLog('アプリ起動 - Version 4.0');
+    displayCurrentOrigin();
+    
+    const savedId = localStorage.getItem('rakutenAppId');
+    const savedKey = localStorage.getItem('rakutenAccessKey');
+    
+    if (savedId) document.getElementById('rakutenAppId').value = savedId;
+    if (savedKey) document.getElementById('rakutenAccessKey').value = savedKey;
+    
+    updateConfigStatus(savedId && savedKey);
+});
+
+function saveCredentials() {
+    const appId = document.getElementById('rakutenAppId').value.trim();
+    const accessKey = document.getElementById('rakutenAccessKey').value.trim();
+    
+    if (!appId || !accessKey) {
+        showMessage('アプリケーションIDとアクセスキーの両方を入力してください', 'error');
+        return;
+    }
+    
+    localStorage.setItem('rakutenAppId', appId);
+    localStorage.setItem('rakutenAccessKey', accessKey);
+    updateConfigStatus(true);
+    showMessage('✅ 認証情報を保存しました', 'success');
+}
+
+function updateConfigStatus(isSet) {
+    const statusEl = document.getElementById('configStatus');
+    statusEl.innerHTML = isSet
+        ? '<span class="config-status success">✓ 設定済</span>'
+        : '<span class="config-status warning">⚠ 未設定</span>';
+}
+
+// 楽天新APIを呼び出す（fetch方式）
+async function callRakutenApi(keyword, appId, accessKey, hits = 12) {
+    const params = new URLSearchParams({
+        applicationId: appId,
+        accessKey: accessKey,
+        keyword: keyword,
+        hits: hits,
+        format: 'json',
+        sort: '+itemPrice',
+        imageFlag: 1,
+        availability: 1,
+    });
+    
+    const url = `${RAKUTEN_API_URL}?${params.toString()}`;
+    addDebugLog('リクエスト送信: ' + RAKUTEN_API_URL);
+    
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            mode: 'cors',
+        });
+        
+        addDebugLog('レスポンス受信: HTTP ' + response.status);
+        
+        if (!response.ok) {
+            const errorText = await response.text().catch(() => '');
+            
+            if (response.status === 403) {
+                throw new Error(
+                    '【403 Forbidden】Originチェックで拒否されました。\n' +
+                    '→ 現在のOriginを、楽天アプリの「許可されたWebサイト」に追加してください'
+                );
+            } else if (response.status === 400) {
+                throw new Error('【400】認証情報またはパラメータが正しくありません: ' + errorText.substring(0, 200));
+            } else if (response.status === 401) {
+                throw new Error('【401】認証エラー：accessKeyが正しくありません');
+            } else {
+                throw new Error(`HTTP ${response.status}: ` + errorText.substring(0, 200));
+            }
+        }
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error_description || data.error);
+        }
+        
+        const itemCount = data.Items ? data.Items.length : 0;
+        addDebugLog('取得件数: ' + itemCount);
+        
+        return data.Items ? data.Items.map(w => w.Item || w) : [];
+        
+    } catch (error) {
+        if (error.message.includes('Failed to fetch')) {
+            throw new Error(
+                'ネットワーク接続エラー、またはCORS拒否です。\n' +
+                '→ ファイルをローカルで開いている場合は、GitHub Pages等で公開してから実行してください'
+            );
+        }
+        throw error;
+    }
+}
+
+async function testConnection() {
+    const appId = document.getElementById('rakutenAppId').value.trim() || localStorage.getItem('rakutenAppId');
+    const accessKey = document.getElementById('rakutenAccessKey').value.trim() || localStorage.getItem('rakutenAccessKey');
+    
+    if (!appId || !accessKey) {
+        showMessage('まずアプリIDとアクセスキーを両方入力してください', 'error');
+        return;
+    }
+    
+    debugLog = [];
+    addDebugLog('====== 接続テスト開始 ======');
+    addDebugLog('アプリID: ' + appId.substring(0, 12) + '...');
+    addDebugLog('accessKey: ' + accessKey.substring(0, 6) + '...');
+    displayCurrentOrigin();
+    
+    showMessage('🔧 テスト中...', 'info');
+    showDebugOutput();
+    
+    try {
+        const items = await callRakutenApi('テスト', appId, accessKey, 1);
+        addDebugLog('====== ✅ テスト成功 ======');
+        addDebugLog('取得サンプル: ' + (items[0] ? items[0].itemName.substring(0, 30) + '...' : 'なし'));
+        showMessage('✅ 接続成功！楽天APIに正常にアクセスできました', 'success');
+    } catch (error) {
+        addDebugLog('====== ❌ テスト失敗 ======');
+        addDebugLog('エラー: ' + error.message);
+        showMessage('❌ 接続失敗\n' + error.message, 'error');
+    } finally {
+        showDebugOutput();
+    }
+}
+
+function cleanProductName(name) {
+    return name
+        .replace(/【.*?】/g, '')
+        .replace(/\[.*?\]/g, '')
+        .replace(/送料無料/g, '')
+        .replace(/ポイント\d+倍/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .substring(0, 60);
+}
+
+function buildAmazonSearchUrl(productName) {
+    return `https://www.amazon.co.jp/s?k=${encodeURIComponent(cleanProductName(productName))}`;
+}
+
+function buildYahooSearchUrl(productName) {
+    return `https://shopping.yahoo.co.jp/search?p=${encodeURIComponent(cleanProductName(productName))}`;
+}
+
+function formatPrice(price) {
+    return new Intl.NumberFormat('ja-JP', {
+        style: 'currency',
+        currency: 'JPY',
+        minimumFractionDigits: 0
+    }).format(price);
+}
+
+function calculateEffectivePrice(price, shipping, points) {
+    return price + shipping - points;
+}
+
+function createRakutenCard(item) {
+    const pointRate = 1;
+    const points = Math.floor(item.itemPrice * pointRate / 100);
+    const shipping = item.postageFlag === 0 ? 0 : 500;
+    const effective = calculateEffectivePrice(item.itemPrice, shipping, points);
+    
+    return `
+    <div class="site-card real-data">
+        <div class="site-header">
+            <div class="site-name">
+                <div class="site-logo rakuten-logo">R</div>
+                楽天市場
+            </div>
+        </div>
+        <div class="price-info">
+            <div class="price-row">
+                <span class="price-label">販売価格</span>
+                <span class="price-value main">${formatPrice(item.itemPrice)}</span>
+            </div>
+            <div class="price-row">
+                <span class="price-label">送料</span>
+                <span class="price-value">
+                    ${shipping === 0 
+                        ? '<span class="shipping-free">送料無料</span>' 
+                        : `<span class="shipping-paid">送料別（+${formatPrice(shipping)}）</span>`}
+                </span>
+            </div>
+            <div class="price-row">
+                <span class="price-label">ポイント</span>
+                <span class="price-value">
+                    <span class="points-badge">${pointRate}% ${formatPrice(points)}</span>
+                </span>
+            </div>
+            <div class="effective-price">
+                <div class="effective-price-label">実質価格</div>
+                <div class="effective-price-value">${formatPrice(effective)}</div>
+            </div>
+        </div>
+        <a href="${item.itemUrl}" target="_blank" rel="noopener noreferrer" class="buy-link">
+            → 楽天で商品ページを見る
+        </a>
+    </div>`;
+}
+
+function createAmazonCard(productName) {
+    return `
+    <div class="site-card">
+        <div class="site-header">
+            <div class="site-name">
+                <div class="site-logo amazon-logo">a</div>
+                Amazon
+            </div>
+        </div>
+        <div class="no-data">商品名で検索した結果を表示</div>
+        <a href="${buildAmazonSearchUrl(productName)}" target="_blank" rel="noopener noreferrer" class="buy-link">
+            → Amazonで検索結果を見る
+        </a>
+    </div>`;
+}
+
+function createYahooCard(productName) {
+    return `
+    <div class="site-card">
+        <div class="site-header">
+            <div class="site-name">
+                <div class="site-logo yahoo-logo">Y</div>
+                Yahoo!ショッピング
+            </div>
+        </div>
+        <div class="no-data">商品名で検索した結果を表示</div>
+        <a href="${buildYahooSearchUrl(productName)}" target="_blank" rel="noopener noreferrer" class="buy-link">
+            → Yahoo!で検索結果を見る
+        </a>
+    </div>`;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function createProductCard(item) {
+    const imageUrl = item.mediumImageUrls && item.mediumImageUrls.length > 0
+        ? (typeof item.mediumImageUrls[0] === 'string' ? item.mediumImageUrls[0] : item.mediumImageUrls[0].imageUrl)
+        : null;
+    
+    const imageHtml = imageUrl
+        ? `<img src="${imageUrl}" alt="" onerror="this.parentElement.innerHTML='<div class=\\'product-image-placeholder\\'>📦</div>'">`
+        : `<div class="product-image-placeholder">📦</div>`;
+    
+    return `
+    <div class="product-card">
+        <div class="product-image-wrap">${imageHtml}</div>
+        <div class="product-info">
+            <div class="product-title">${escapeHtml(item.itemName)}</div>
+            <div class="product-shop">📍 ${escapeHtml(item.shopName)}</div>
+        </div>
+        <div class="sites-comparison">
+            ${createRakutenCard(item)}
+            ${createAmazonCard(item.itemName)}
+            ${createYahooCard(item.itemName)}
+        </div>
+    </div>`;
+}
+
+function showMessage(text, type = 'info') {
+    const container = document.getElementById('messageContainer');
+    container.innerHTML = `<div class="message ${type}">${text.replace(/\n/g, '<br>')}</div>`;
+}
+
+document.getElementById('keyword').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') searchProducts();
+});
+
+async function searchProducts() {
+    const keyword = document.getElementById('keyword').value.trim();
+    const appId = document.getElementById('rakutenAppId').value.trim() || localStorage.getItem('rakutenAppId');
+    const accessKey = document.getElementById('rakutenAccessKey').value.trim() || localStorage.getItem('rakutenAccessKey');
+    const btn = document.getElementById('searchBtn');
+    const btnText = document.getElementById('btnText');
+    
+    if (!keyword) {
+        showMessage('キーワードを入力してください', 'error');
+        return;
+    }
+    
+    if (!appId || !accessKey) {
+        showMessage('楽天APIの認証情報が未設定です（アプリID＋アクセスキー）', 'warning');
+        document.getElementById('configPanel').open = true;
+        return;
+    }
+    
+    btn.disabled = true;
+    btnText.innerHTML = '<span class="loading-spinner"></span>検索中...';
+    document.getElementById('resultsSection').innerHTML = `
+        <div class="empty-state">
+            <div class="empty-state-icon">⏳</div>
+            <h2>検索中...</h2>
+            <p>楽天新APIから取得しています</p>
+        </div>`;
+    
+    debugLog = [];
+    addDebugLog('====== 検索開始 ======');
+    addDebugLog('キーワード: ' + keyword);
+    
+    try {
+        const items = await callRakutenApi(keyword, appId, accessKey, 12);
+        
+        if (items.length === 0) {
+            document.getElementById('resultsSection').innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">😢</div>
+                    <h2>商品が見つかりませんでした</h2>
+                    <p>別のキーワードでお試しください</p>
+                </div>`;
+            return;
+        }
+        
+        let html = '<div class="products-grid">';
+        items.forEach(item => { html += createProductCard(item); });
+        html += '</div>';
+        
+        document.getElementById('resultsSection').innerHTML = html;
+        showMessage(`✅「${keyword}」で ${items.length} 件取得しました`, 'success');
+        
+    } catch (error) {
+        addDebugLog('====== ❌ 検索失敗 ======');
+        addDebugLog('エラー: ' + error.message);
+        console.error('検索エラー:', error);
+        showMessage(`❌ ${error.message}`, 'error');
+        document.getElementById('resultsSection').innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">⚠️</div>
+                <h2>取得に失敗しました</h2>
+                <p style="white-space:pre-line;">${escapeHtml(error.message)}</p>
+                <p style="margin-top:10px; font-size:0.8em;">⚙️設定パネルの「接続テスト」で詳細をご確認ください</p>
+            </div>`;
+        showDebugOutput();
+    } finally {
+        btn.disabled = false;
+        btnText.textContent = '検索';
+    }
+}
+</script>
+
+</body>
+</html>
