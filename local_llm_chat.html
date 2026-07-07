@@ -56,6 +56,13 @@ header .subtitle { font-size: 0.85em; opacity: 0.95; }
     border-top: 1px solid #E0E0E0;
 }
 .panel-content p { margin-bottom: 10px; font-size: 0.85em; color: #555; }
+.panel-content code {
+    background: #F0F1FA;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: monospace;
+    color: #1F2A63;
+}
 
 .field-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
 .field-group { flex: 1; min-width: 160px; }
@@ -285,6 +292,11 @@ footer { text-align: center; padding: 20px; color: #888; font-size: 0.82em; }
         <p>
             ローカルで動作するLLMサーバー（<strong>Ollama</strong> や <strong>LM Studio / llama.cpp などのOpenAI互換サーバー</strong>）に接続します。
             複数のLLM設定を保存しておき、会話ごとに切り替えて使用できます。
+        </p>
+        <p style="font-size:0.78em; color:#999;">
+            📱 <strong>スマホから使う場合</strong>: このアプリ画面自体はスマホのブラウザで開けますが、「localhost」はスマホ自身を指すためPC上のLLMサーバーには届きません。
+            PCとスマホを同じWi-Fiに繋いだ上で、ベースURLにはPCのLAN内IPアドレス（例：<code>http://192.168.1.10:11434</code>）を指定してください。
+            またOllama側も <code>OLLAMA_HOST=0.0.0.0</code>（外部からの接続を許可）と <code>OLLAMA_ORIGINS=*</code>（CORS許可）を設定して起動する必要があります。
         </p>
 
         <div class="field-row">
