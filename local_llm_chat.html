@@ -192,6 +192,31 @@ header .subtitle { font-size: 0.85em; opacity: 0.95; }
 .message-banner.error { background: rgba(214,40,40,0.1); color: #D62828; border-left: 4px solid #D62828; }
 .message-banner.success { background: rgba(6,167,125,0.1); color: #06A77D; border-left: 4px solid #06A77D; }
 
+.model-chip {
+    padding: 5px 12px;
+    font-size: 0.78em;
+    border-radius: 16px;
+    border: 1px solid #D8DBEF;
+    background: #F7F8FC;
+    cursor: pointer;
+}
+.model-chip:hover { background: #EFEDFF; border-color: #5B4FE9; }
+.progress-track { background: #E7E9F5; border-radius: 8px; overflow: hidden; height: 10px; }
+.progress-fill { background: #5B4FE9; height: 100%; width: 0%; transition: width 0.2s; }
+.progress-text { font-size: 0.78em; color: #666; margin-top: 6px; }
+.pull-log {
+    background: #2D2D2D;
+    color: #7CFC9A;
+    padding: 10px;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 0.76em;
+    margin-top: 10px;
+    max-height: 180px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+}
+
 .library {
     background: white;
     padding: 18px;
@@ -321,6 +346,51 @@ footer { text-align: center; padding: 20px; color: #888; font-size: 0.82em; }
             </div>
         </div>
         <div class="skill-list" id="skillList"></div>
+    </div>
+</details>
+
+<details class="panel" id="pullPanel">
+    <summary>📥 モデルのダウンロード（Ollama）<span id="pullPanelStatus"></span></summary>
+    <div class="panel-content">
+        <p>
+            Ollamaサーバーにモデルをダウンロード（pull）します。Ollama自体が未インストールの場合は
+            <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer">ollama.com/download</a>
+            から入手してください。ダウンロード可能なモデルの一覧・タグ名は
+            <a href="https://ollama.com/library" target="_blank" rel="noopener noreferrer">ollama.com/library</a>
+            で確認できます。
+        </p>
+        <p style="font-size:0.78em; color:#999;">
+            ※ OpenAI互換サーバー（LM Studioなど）には共通のダウンロードAPIがないため、この機能はOllama専用です。
+            LM Studioの場合はアプリ内のモデル検索、または
+            <a href="https://huggingface.co" target="_blank" rel="noopener noreferrer">huggingface.co</a>
+            から直接取得してください。
+        </p>
+
+        <div class="field-row">
+            <div class="field-group">
+                <label for="pullBaseUrl">OllamaサーバーのベースURL</label>
+                <input type="text" id="pullBaseUrl" placeholder="例：http://localhost:11434">
+            </div>
+            <div class="field-group">
+                <label for="pullModelName">モデル名</label>
+                <input type="text" id="pullModelName" placeholder="例：llama3.1:8b">
+            </div>
+        </div>
+
+        <div class="field-hint" style="margin-bottom:8px;">よく使われるモデル（クリックで入力）:</div>
+        <div class="btn-group" id="popularModelButtons" style="margin-bottom:12px;"></div>
+
+        <div class="btn-group">
+            <button class="btn btn-primary" id="pullStartBtn" onclick="startModelPull()">📥 ダウンロード開始</button>
+            <button class="btn btn-danger" id="pullStopBtn" onclick="stopModelPull()" style="display:none;">■ 中止</button>
+        </div>
+
+        <div id="pullProgressWrap" style="display:none; margin-top:12px;">
+            <div class="progress-track"><div class="progress-fill" id="pullProgressBar"></div></div>
+            <div class="progress-text" id="pullProgressText"></div>
+        </div>
+
+        <div class="pull-log" id="pullLog" style="display:none;"></div>
     </div>
 </details>
 
@@ -455,6 +525,9 @@ window.addEventListener('DOMContentLoaded', () => {
     renderSkillSelect();
     renderLibrary();
     startNewConversation(true);
+
+    renderPopularModelButtons();
+    document.getElementById('pullBaseUrl').value = defaultPullBaseUrl();
 });
 
 function updateApiKeyVisibility() {
@@ -572,6 +645,124 @@ async function fetchModelList() {
             'error'
         );
     }
+}
+
+/* ---------- モデルのダウンロード（Ollama pull） ---------- */
+
+const POPULAR_MODELS = [
+    'llama3.1:8b', 'llama3.2:3b', 'mistral:7b', 'gemma2:9b',
+    'phi3:mini', 'qwen2.5:7b', 'codellama:7b', 'deepseek-coder-v2:16b',
+];
+
+function renderPopularModelButtons() {
+    const el = document.getElementById('popularModelButtons');
+    el.innerHTML = POPULAR_MODELS.map(m =>
+        `<button type="button" class="model-chip" onclick="document.getElementById('pullModelName').value='${m}'">${m}</button>`
+    ).join('');
+}
+
+function defaultPullBaseUrl() {
+    const activeProfile = activeProfileId && getProfileById(activeProfileId);
+    if (activeProfile && activeProfile.apiType === 'ollama') return activeProfile.baseUrl;
+    const anyOllama = profiles.find(p => p.apiType === 'ollama');
+    return anyOllama ? anyOllama.baseUrl : 'http://localhost:11434';
+}
+
+function formatBytes(bytes) {
+    if (!bytes || bytes < 1024) return `${bytes || 0} B`;
+    const units = ['KB', 'MB', 'GB', 'TB'];
+    let val = bytes;
+    let i = -1;
+    do { val /= 1024; i++; } while (val >= 1024 && i < units.length - 1);
+    return `${val.toFixed(1)} ${units[i]}`;
+}
+
+let pullAbortController = null;
+
+async function startModelPull() {
+    const baseUrl = document.getElementById('pullBaseUrl').value.trim().replace(/\/$/, '');
+    const modelName = document.getElementById('pullModelName').value.trim();
+    if (!baseUrl || !modelName) {
+        showBanner('OllamaサーバーのベースURLとモデル名を入力してください', 'error');
+        return;
+    }
+
+    const startBtn = document.getElementById('pullStartBtn');
+    const stopBtn = document.getElementById('pullStopBtn');
+    const progressWrap = document.getElementById('pullProgressWrap');
+    const progressBar = document.getElementById('pullProgressBar');
+    const progressText = document.getElementById('pullProgressText');
+    const logEl = document.getElementById('pullLog');
+
+    startBtn.disabled = true;
+    stopBtn.style.display = 'inline-block';
+    progressWrap.style.display = 'block';
+    logEl.style.display = 'block';
+    logEl.textContent = '';
+    progressBar.style.width = '0%';
+    progressText.textContent = `「${modelName}」のダウンロードを開始します…`;
+
+    pullAbortController = new AbortController();
+    let lastStatus = '';
+
+    try {
+        const res = await fetch(`${baseUrl}/api/pull`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: modelName, stream: true }),
+            signal: pullAbortController.signal,
+        });
+        if (!res.ok || !res.body) throw new Error('HTTP ' + res.status);
+
+        await readNdjsonStream(res.body, (obj) => {
+            if (obj.error) throw new Error(obj.error);
+
+            if (obj.total && obj.completed != null) {
+                const pct = Math.min(100, Math.round((obj.completed / obj.total) * 100));
+                progressBar.style.width = pct + '%';
+                progressText.textContent = `${obj.status}（${pct}% ・ ${formatBytes(obj.completed)} / ${formatBytes(obj.total)}）`;
+            } else if (obj.status) {
+                progressText.textContent = obj.status;
+            }
+
+            if (obj.status && obj.status !== lastStatus) {
+                lastStatus = obj.status;
+                logEl.textContent += `[${new Date().toLocaleTimeString('ja-JP')}] ${obj.status}\n`;
+                logEl.scrollTop = logEl.scrollHeight;
+            }
+
+            if (obj.status === 'success') progressBar.style.width = '100%';
+        });
+
+        showBanner(`✅ モデル「${modelName}」のダウンロードが完了しました。LLM設定欄に反映しました。`, 'success');
+
+        document.getElementById('llmApiType').value = 'ollama';
+        updateApiKeyVisibility();
+        document.getElementById('llmBaseUrl').value = baseUrl;
+        document.getElementById('llmModel').value = modelName;
+        document.getElementById('llmPanel').open = true;
+        fetchModelList();
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            progressText.textContent = 'ダウンロードを中止しました';
+            showBanner('ダウンロードを中止しました', 'info');
+        } else {
+            progressText.textContent = 'エラー: ' + error.message;
+            showBanner(
+                `❌ モデルのダウンロードに失敗しました: ${error.message}\n` +
+                `→ Ollamaが起動しているか、モデル名が正しいか（ollama.com/library参照）確認してください`,
+                'error'
+            );
+        }
+    } finally {
+        startBtn.disabled = false;
+        stopBtn.style.display = 'none';
+        pullAbortController = null;
+    }
+}
+
+function stopModelPull() {
+    if (pullAbortController) pullAbortController.abort();
 }
 
 /* ---------- スキル管理 ---------- */
