@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>ローカルLLM会話アプリ</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif;
+    background: linear-gradient(135deg, #eef1ff 0%, #dce4f7 100%);
+    min-height: 100vh;
+    color: #1A1A1A;
+    line-height: 1.6;
+    padding: 15px;
+}
+
+.container { max-width: 1200px; margin: 0 auto; }
+
+header {
+    background: linear-gradient(135deg, #5B4FE9 0%, #1F2A63 100%);
+    color: white;
+    padding: 25px 20px;
+    border-radius: 16px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+    text-align: center;
+}
+header h1 { font-size: 1.5em; font-weight: 900; margin-bottom: 6px; }
+header .subtitle { font-size: 0.85em; opacity: 0.95; }
+
+.panel {
+    background: white;
+    padding: 18px;
+    border-radius: 12px;
+    margin-bottom: 15px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    border-left: 4px solid #5B4FE9;
+}
+.panel summary {
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.95em;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.panel-content {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #E0E0E0;
+}
+.panel-content p { margin-bottom: 10px; font-size: 0.85em; color: #555; }
+
+.field-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.field-group { flex: 1; min-width: 160px; }
+.field-group.narrow { flex: 0 0 140px; }
+.field-group label {
+    display: block;
+    font-size: 0.82em;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: #333;
+}
+.field-group input, .field-group select, .field-group textarea {
+    width: 100%;
+    padding: 9px 10px;
+    border: 2px solid #E0E0E0;
+    border-radius: 8px;
+    font-size: 0.9em;
+    font-family: inherit;
+    background: white;
+}
+.field-group input:focus, .field-group select:focus, .field-group textarea:focus {
+    outline: none; border-color: #5B4FE9;
+}
+.field-hint { font-size: 0.72em; color: #888; margin-top: 3px; }
+
+.btn {
+    padding: 9px 16px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.88em;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+.btn-primary { background: #5B4FE9; color: white; }
+.btn-secondary { background: #E9ECFB; color: #1F2A63; }
+.btn-danger { background: #FDEEEE; color: #C62828; }
+.btn-success { background: #06A77D; color: white; }
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.profile-list, .skill-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.profile-item, .skill-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: #F7F8FC;
+    border: 2px solid #E7E9F5;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 0.85em;
+}
+.profile-item.active, .skill-item.active { border-color: #5B4FE9; background: #EFEDFF; }
+.profile-item-name, .skill-item-name { font-weight: 700; }
+.profile-item-meta { color: #888; font-size: 0.85em; }
+
+.status-line {
+    font-size: 0.8em;
+    padding: 4px 10px;
+    border-radius: 6px;
+    display: inline-block;
+    margin-left: 8px;
+}
+.status-line.success { background: rgba(6,167,125,0.15); color: #06A77D; }
+.status-line.warning { background: rgba(247,184,1,0.2); color: #B8860B; }
+.status-line.error { background: rgba(214,40,40,0.12); color: #D62828; }
+
+.chatbar {
+    background: white;
+    padding: 14px 18px;
+    border-radius: 14px;
+    margin-bottom: 15px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.08);
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+.chatbar .field-group { min-width: 180px; }
+
+.chat-window {
+    background: white;
+    border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    height: 480px;
+    margin-bottom: 15px;
+    overflow: hidden;
+}
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.msg { max-width: 80%; padding: 10px 14px; border-radius: 12px; font-size: 0.92em; white-space: pre-wrap; word-break: break-word; }
+.msg.user { align-self: flex-end; background: #5B4FE9; color: white; border-bottom-right-radius: 3px; }
+.msg.assistant { align-self: flex-start; background: #F0F1FA; color: #1A1A1A; border-bottom-left-radius: 3px; }
+.msg .msg-meta { font-size: 0.72em; opacity: 0.7; margin-bottom: 4px; }
+.msg.assistant.streaming::after { content: '▍'; animation: blink 1s step-start infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+.chat-empty { margin: auto; text-align: center; color: #999; }
+.chat-empty .icon { font-size: 2.5em; margin-bottom: 10px; }
+
+.chat-input-row {
+    border-top: 1px solid #E7E9F5;
+    padding: 12px 14px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+}
+.chat-input-row textarea {
+    flex: 1;
+    resize: none;
+    border: 2px solid #E0E0E0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 0.92em;
+    font-family: inherit;
+    min-height: 42px;
+    max-height: 140px;
+}
+.chat-input-row textarea:focus { outline: none; border-color: #5B4FE9; }
+
+.message-banner { padding: 10px 14px; border-radius: 10px; margin-bottom: 15px; font-size: 0.88em; white-space: pre-line; }
+.message-banner.info { background: rgba(31,42,99,0.08); color: #1F2A63; border-left: 4px solid #1F2A63; }
+.message-banner.error { background: rgba(214,40,40,0.1); color: #D62828; border-left: 4px solid #D62828; }
+.message-banner.success { background: rgba(6,167,125,0.1); color: #06A77D; border-left: 4px solid #06A77D; }
+
+.library {
+    background: white;
+    padding: 18px;
+    border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+.library h2 { font-size: 1.05em; margin-bottom: 12px; }
+.skill-group { margin-bottom: 14px; }
+.skill-group-title {
+    font-weight: 700;
+    font-size: 0.9em;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #1F2A63;
+}
+.conv-list { display: flex; flex-direction: column; gap: 8px; }
+.conv-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: #F7F8FC;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.85em;
+    flex-wrap: wrap;
+}
+.conv-item.current { border: 2px solid #5B4FE9; background: #EFEDFF; }
+.conv-title { font-weight: 600; }
+.conv-meta { color: #888; font-size: 0.8em; }
+.conv-actions { display: flex; gap: 6px; }
+.conv-actions button {
+    padding: 5px 10px;
+    font-size: 0.78em;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.empty-library { text-align: center; color: #999; padding: 20px; font-size: 0.88em; }
+
+footer { text-align: center; padding: 20px; color: #888; font-size: 0.82em; }
+
+@media (max-width: 768px) {
+    body { padding: 10px; }
+    .chat-window { height: 420px; }
+    .msg { max-width: 90%; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+    <h1>🧠 ローカルLLM会話アプリ</h1>
+    <div class="subtitle">Ollama / OpenAI互換ローカルサーバーに接続し、スキル別にMarkdown自動保存</div>
+</header>
+
+<div id="bannerContainer"></div>
+
+<details class="panel" id="llmPanel">
+    <summary>⚙️ 使用するLLMの設定<span id="llmPanelStatus"></span></summary>
+    <div class="panel-content">
+        <p>
+            ローカルで動作するLLMサーバー（<strong>Ollama</strong> や <strong>LM Studio / llama.cpp などのOpenAI互換サーバー</strong>）に接続します。
+            複数のLLM設定を保存しておき、会話ごとに切り替えて使用できます。
+        </p>
+
+        <div class="field-row">
+            <div class="field-group narrow">
+                <label for="llmApiType">API形式</label>
+                <select id="llmApiType">
+                    <option value="ollama">Ollama</option>
+                    <option value="openai">OpenAI互換</option>
+                </select>
+            </div>
+            <div class="field-group">
+                <label for="llmName">表示名</label>
+                <input type="text" id="llmName" placeholder="例：Llama3 (Ollama)">
+            </div>
+            <div class="field-group">
+                <label for="llmBaseUrl">ベースURL</label>
+                <input type="text" id="llmBaseUrl" placeholder="例：http://localhost:11434">
+                <div class="field-hint" id="llmBaseUrlHint">Ollama標準ポートは11434</div>
+            </div>
+        </div>
+        <div class="field-row">
+            <div class="field-group">
+                <label for="llmModel">モデル名</label>
+                <input type="text" id="llmModel" list="modelSuggestions" placeholder="例：llama3:8b">
+                <datalist id="modelSuggestions"></datalist>
+            </div>
+            <div class="field-group" id="apiKeyGroup" style="display:none;">
+                <label for="llmApiKey">APIキー（任意）</label>
+                <input type="text" id="llmApiKey" placeholder="不要な場合は空欄でOK">
+            </div>
+            <div class="field-group narrow" style="display:flex; align-items:flex-end;">
+                <button class="btn btn-secondary" style="width:100%;" onclick="fetchModelList()">📥 モデル一覧取得</button>
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-primary" onclick="addOrUpdateProfile()">💾 このLLM設定を保存</button>
+        </div>
+
+        <div class="profile-list" id="profileList"></div>
+    </div>
+</details>
+
+<details class="panel" id="skillPanel">
+    <summary>🎯 スキルの管理<span id="skillPanelStatus"></span></summary>
+    <div class="panel-content">
+        <p>会話ごとに「スキル」（一般・技術・プログラミングなど）を設定できます。スキルにはLLMへの指示（システムプロンプト）を紐づけられます。</p>
+        <div class="field-row">
+            <div class="field-group">
+                <label for="newSkillName">スキル名</label>
+                <input type="text" id="newSkillName" placeholder="例：語学学習">
+            </div>
+            <div class="field-group">
+                <label for="newSkillPrompt">システムプロンプト（任意）</label>
+                <input type="text" id="newSkillPrompt" placeholder="例：あなたは語学学習の専門アシスタントです。">
+            </div>
+            <div class="field-group narrow" style="display:flex; align-items:flex-end;">
+                <button class="btn btn-primary" style="width:100%;" onclick="addSkill()">＋ 追加</button>
+            </div>
+        </div>
+        <div class="skill-list" id="skillList"></div>
+    </div>
+</details>
+
+<div class="chatbar">
+    <div class="field-group">
+        <label for="skillSelect">スキル</label>
+        <select id="skillSelect" onchange="onSkillOrProfileChange()"></select>
+    </div>
+    <div class="field-group">
+        <label for="profileSelect">使用LLM</label>
+        <select id="profileSelect" onchange="onSkillOrProfileChange()"></select>
+    </div>
+    <div class="btn-group">
+        <button class="btn btn-secondary" onclick="startNewConversation()">🆕 新しい会話</button>
+    </div>
+</div>
+
+<div class="chat-window">
+    <div class="chat-messages" id="chatMessages">
+        <div class="chat-empty" id="chatEmpty">
+            <div class="icon">💬</div>
+            <div>スキルと使用するLLMを選んで、会話を始めましょう</div>
+        </div>
+    </div>
+    <div class="chat-input-row">
+        <textarea id="chatInput" placeholder="メッセージを入力（Enterで送信 / Shift+Enterで改行）"></textarea>
+        <button class="btn btn-primary" id="sendBtn" onclick="sendMessage()">送信</button>
+        <button class="btn btn-danger" id="stopBtn" onclick="stopGeneration()" style="display:none;">■ 停止</button>
+    </div>
+</div>
+
+<div class="library">
+    <h2>📚 保存済みの会話（スキル別・Markdown自動保存）</h2>
+    <div id="libraryContent"></div>
+</div>
+
+<footer>
+    <p>※ 会話はブラウザのlocalStorageにMarkdown形式で自動保存されます（サーバーへの送信はLLM API呼び出しのみ）</p>
+</footer>
+
+</div>
+
+<script>
+console.log('🧠 ローカルLLM会話アプリ起動');
+
+const STORAGE_KEYS = {
+    profiles: 'llmChatApp:llmProfiles',
+    activeProfileId: 'llmChatApp:activeProfileId',
+    skills: 'llmChatApp:skills',
+    activeSkillName: 'llmChatApp:activeSkillName',
+    conversations: 'llmChatApp:conversations',
+};
+
+const DEFAULT_SKILLS = [
+    { name: '一般', systemPrompt: 'あなたは親切で丁寧な汎用アシスタントです。ユーザーの質問に分かりやすく答えてください。' },
+    { name: '技術', systemPrompt: 'あなたは技術全般に精通した専門アシスタントです。ITインフラ、ツール、技術トレンドについて正確かつ具体的に回答してください。' },
+    { name: 'プログラミング', systemPrompt: 'あなたはプログラミングに精通したエキスパートエンジニアです。必要に応じてコード例を交えながら、分かりやすく回答してください。' },
+];
+
+let profiles = [];
+let activeProfileId = null;
+let skills = [];
+let activeSkillName = null;
+let conversations = [];
+
+let currentConversation = null; // { id, skillName, profileId, profileName, model, messages: [{role, content, ts}], createdAt, updatedAt }
+let abortController = null;
+let isGenerating = false;
+
+function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function loadJSON(key, fallback) {
+    try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+    } catch (e) {
+        console.error('読み込みエラー:', key, e);
+        return fallback;
+    }
+}
+
+function saveJSON(key, value) {
+    localStorage.setItem(key, JSON.stringify(value));
+}
+
+function showBanner(text, type = 'info') {
+    const container = document.getElementById('bannerContainer');
+    container.innerHTML = `<div class="message-banner ${type}">${escapeHtml(text)}</div>`;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text == null ? '' : String(text);
+    return div.innerHTML;
+}
+
+function formatDateTime(iso) {
+    try {
+        return new Date(iso).toLocaleString('ja-JP');
+    } catch (e) {
+        return iso;
+    }
+}
+
+/* ---------- 初期化 ---------- */
+
+window.addEventListener('DOMContentLoaded', () => {
+    profiles = loadJSON(STORAGE_KEYS.profiles, []);
+    activeProfileId = localStorage.getItem(STORAGE_KEYS.activeProfileId) || (profiles[0] && profiles[0].id) || null;
+
+    skills = loadJSON(STORAGE_KEYS.skills, DEFAULT_SKILLS.map(s => ({ id: uid(), ...s })));
+    if (skills.length === 0) skills = DEFAULT_SKILLS.map(s => ({ id: uid(), ...s }));
+    activeSkillName = localStorage.getItem(STORAGE_KEYS.activeSkillName) || skills[0].name;
+
+    conversations = loadJSON(STORAGE_KEYS.conversations, []);
+
+    document.getElementById('llmApiType').addEventListener('change', updateApiKeyVisibility);
+    updateApiKeyVisibility();
+
+    document.getElementById('chatInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    renderProfileList();
+    renderProfileSelect();
+    renderSkillList();
+    renderSkillSelect();
+    renderLibrary();
+    startNewConversation(true);
+});
+
+function updateApiKeyVisibility() {
+    const type = document.getElementById('llmApiType').value;
+    document.getElementById('apiKeyGroup').style.display = type === 'openai' ? 'block' : 'none';
+    document.getElementById('llmBaseUrlHint').textContent = type === 'ollama'
+        ? 'Ollama標準ポートは11434（例：http://localhost:11434）'
+        : 'OpenAI互換サーバーの例：http://localhost:1234/v1';
+}
+
+/* ---------- LLMプロファイル管理 ---------- */
+
+function addOrUpdateProfile() {
+    const apiType = document.getElementById('llmApiType').value;
+    const name = document.getElementById('llmName').value.trim();
+    const baseUrl = document.getElementById('llmBaseUrl').value.trim().replace(/\/$/, '');
+    const model = document.getElementById('llmModel').value.trim();
+    const apiKey = document.getElementById('llmApiKey').value.trim();
+
+    if (!name || !baseUrl || !model) {
+        showBanner('表示名・ベースURL・モデル名をすべて入力してください', 'error');
+        return;
+    }
+
+    const profile = { id: uid(), apiType, name, baseUrl, model, apiKey };
+    profiles.push(profile);
+    saveJSON(STORAGE_KEYS.profiles, profiles);
+    activeProfileId = profile.id;
+    localStorage.setItem(STORAGE_KEYS.activeProfileId, activeProfileId);
+
+    document.getElementById('llmName').value = '';
+    document.getElementById('llmBaseUrl').value = '';
+    document.getElementById('llmModel').value = '';
+    document.getElementById('llmApiKey').value = '';
+
+    renderProfileList();
+    renderProfileSelect();
+    showBanner(`✅ LLM設定「${name}」を保存しました`, 'success');
+}
+
+function deleteProfile(id) {
+    profiles = profiles.filter(p => p.id !== id);
+    saveJSON(STORAGE_KEYS.profiles, profiles);
+    if (activeProfileId === id) {
+        activeProfileId = profiles[0] ? profiles[0].id : null;
+        localStorage.setItem(STORAGE_KEYS.activeProfileId, activeProfileId || '');
+    }
+    renderProfileList();
+    renderProfileSelect();
+}
+
+function selectProfile(id) {
+    activeProfileId = id;
+    localStorage.setItem(STORAGE_KEYS.activeProfileId, id);
+    renderProfileList();
+    document.getElementById('profileSelect').value = id;
+}
+
+function renderProfileList() {
+    const el = document.getElementById('profileList');
+    if (profiles.length === 0) {
+        el.innerHTML = '<div class="field-hint">まだLLM設定がありません。上のフォームから追加してください。</div>';
+        document.getElementById('llmPanelStatus').innerHTML = '<span class="status-line warning">⚠ 未設定</span>';
+        return;
+    }
+    document.getElementById('llmPanelStatus').innerHTML = '<span class="status-line success">✓ ' + profiles.length + '件登録済</span>';
+    el.innerHTML = profiles.map(p => `
+        <div class="profile-item ${p.id === activeProfileId ? 'active' : ''}">
+            <div>
+                <div class="profile-item-name">${escapeHtml(p.name)}</div>
+                <div class="profile-item-meta">${p.apiType === 'ollama' ? 'Ollama' : 'OpenAI互換'} ・ ${escapeHtml(p.baseUrl)} ・ ${escapeHtml(p.model)}</div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="selectProfile('${p.id}')">選択</button>
+                <button class="btn btn-danger" onclick="deleteProfile('${p.id}')">削除</button>
+            </div>
+        </div>`).join('');
+}
+
+function renderProfileSelect() {
+    const select = document.getElementById('profileSelect');
+    select.innerHTML = profiles.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+    if (activeProfileId) select.value = activeProfileId;
+}
+
+async function fetchModelList() {
+    const apiType = document.getElementById('llmApiType').value;
+    const baseUrl = document.getElementById('llmBaseUrl').value.trim().replace(/\/$/, '');
+    if (!baseUrl) {
+        showBanner('先にベースURLを入力してください', 'error');
+        return;
+    }
+    try {
+        let names = [];
+        if (apiType === 'ollama') {
+            const res = await fetch(`${baseUrl}/api/tags`);
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            names = (data.models || []).map(m => m.name);
+        } else {
+            const apiKey = document.getElementById('llmApiKey').value.trim();
+            const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
+            const res = await fetch(`${baseUrl}/models`, { headers });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            names = (data.data || []).map(m => m.id);
+        }
+        const datalist = document.getElementById('modelSuggestions');
+        datalist.innerHTML = names.map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
+        showBanner(`✅ ${names.length}件のモデルを取得しました（モデル名の候補に表示されます）`, 'success');
+    } catch (error) {
+        showBanner(
+            `❌ モデル一覧の取得に失敗しました: ${error.message}\n` +
+            `→ サーバーが起動しているか、CORS設定（Ollamaの場合は OLLAMA_ORIGINS 環境変数）を確認してください`,
+            'error'
+        );
+    }
+}
+
+/* ---------- スキル管理 ---------- */
+
+function addSkill() {
+    const name = document.getElementById('newSkillName').value.trim();
+    const systemPrompt = document.getElementById('newSkillPrompt').value.trim()
+        || `あなたは${name}に関する質問に答える専門アシスタントです。`;
+
+    if (!name) {
+        showBanner('スキル名を入力してください', 'error');
+        return;
+    }
+    if (skills.some(s => s.name === name)) {
+        showBanner('同じ名前のスキルが既に存在します', 'error');
+        return;
+    }
+
+    skills.push({ id: uid(), name, systemPrompt });
+    saveJSON(STORAGE_KEYS.skills, skills);
+    document.getElementById('newSkillName').value = '';
+    document.getElementById('newSkillPrompt').value = '';
+    renderSkillList();
+    renderSkillSelect();
+    showBanner(`✅ スキル「${name}」を追加しました`, 'success');
+}
+
+function deleteSkill(id) {
+    const skill = skills.find(s => s.id === id);
+    if (!skill) return;
+    if (skills.length <= 1) {
+        showBanner('スキルは最低1つ必要です', 'error');
+        return;
+    }
+    skills = skills.filter(s => s.id !== id);
+    saveJSON(STORAGE_KEYS.skills, skills);
+    if (activeSkillName === skill.name) {
+        activeSkillName = skills[0].name;
+        localStorage.setItem(STORAGE_KEYS.activeSkillName, activeSkillName);
+    }
+    renderSkillList();
+    renderSkillSelect();
+}
+
+function renderSkillList() {
+    const el = document.getElementById('skillList');
+    el.innerHTML = skills.map(s => `
+        <div class="skill-item ${s.name === activeSkillName ? 'active' : ''}">
+            <div>
+                <div class="skill-item-name">${escapeHtml(s.name)}</div>
+                <div class="profile-item-meta">${escapeHtml(s.systemPrompt)}</div>
+            </div>
+            <button class="btn btn-danger" onclick="deleteSkill('${s.id}')">削除</button>
+        </div>`).join('');
+    document.getElementById('skillPanelStatus').innerHTML = '<span class="status-line success">' + skills.length + '件</span>';
+}
+
+function renderSkillSelect() {
+    const select = document.getElementById('skillSelect');
+    select.innerHTML = skills.map(s => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`).join('');
+    if (activeSkillName) select.value = activeSkillName;
+}
+
+function onSkillOrProfileChange() {
+    activeSkillName = document.getElementById('skillSelect').value;
+    activeProfileId = document.getElementById('profileSelect').value || null;
+    localStorage.setItem(STORAGE_KEYS.activeSkillName, activeSkillName);
+    if (activeProfileId) localStorage.setItem(STORAGE_KEYS.activeProfileId, activeProfileId);
+    renderProfileList();
+    renderSkillList();
+}
+
+function getSkillByName(name) {
+    return skills.find(s => s.name === name) || skills[0];
+}
+
+function getProfileById(id) {
+    return profiles.find(p => p.id === id);
+}
+
+/* ---------- 会話（チャット） ---------- */
+
+function startNewConversation(silent) {
+    if (currentConversation && currentConversation.messages.length > 0) {
+        persistConversation(currentConversation);
+    }
+    currentConversation = {
+        id: uid(),
+        skillName: activeSkillName,
+        profileId: activeProfileId,
+        profileName: activeProfileId && getProfileById(activeProfileId) ? getProfileById(activeProfileId).name : '未選択',
+        model: activeProfileId && getProfileById(activeProfileId) ? getProfileById(activeProfileId).model : '',
+        messages: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    };
+    renderChatMessages();
+    if (!silent) showBanner('🆕 新しい会話を開始しました', 'info');
+}
+
+function renderChatMessages() {
+    const el = document.getElementById('chatMessages');
+    if (!currentConversation || currentConversation.messages.length === 0) {
+        el.innerHTML = `
+            <div class="chat-empty" id="chatEmpty">
+                <div class="icon">💬</div>
+                <div>スキルと使用するLLMを選んで、会話を始めましょう</div>
+            </div>`;
+        return;
+    }
+    el.innerHTML = currentConversation.messages.map(m => `
+        <div class="msg ${m.role}">
+            <div class="msg-meta">${m.role === 'user' ? '🧑 あなた' : '🤖 ' + escapeHtml(currentConversation.profileName)} ・ ${formatDateTime(m.ts)}</div>
+            <div>${escapeHtml(m.content)}</div>
+        </div>`).join('');
+    el.scrollTop = el.scrollHeight;
+}
+
+async function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const text = input.value.trim();
+    if (!text) return;
+
+    if (!activeProfileId || !getProfileById(activeProfileId)) {
+        showBanner('先に「使用するLLMの設定」からLLMを登録・選択してください', 'error');
+        document.getElementById('llmPanel').open = true;
+        return;
+    }
+
+    if (!currentConversation) startNewConversation(true);
+    currentConversation.skillName = activeSkillName;
+    currentConversation.profileId = activeProfileId;
+    const profile = getProfileById(activeProfileId);
+    currentConversation.profileName = profile.name;
+    currentConversation.model = profile.model;
+
+    currentConversation.messages.push({ role: 'user', content: text, ts: new Date().toISOString() });
+    input.value = '';
+    renderChatMessages();
+
+    const skill = getSkillByName(currentConversation.skillName);
+    const apiMessages = [
+        { role: 'system', content: skill.systemPrompt },
+        ...currentConversation.messages.map(m => ({ role: m.role, content: m.content })),
+    ];
+
+    setGenerating(true);
+    const assistantMsg = { role: 'assistant', content: '', ts: new Date().toISOString() };
+    currentConversation.messages.push(assistantMsg);
+    renderChatMessages();
+
+    try {
+        await streamChat(profile, apiMessages, (delta) => {
+            assistantMsg.content += delta;
+            renderChatMessages();
+        });
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            assistantMsg.content += '\n\n（生成を停止しました）';
+        } else {
+            assistantMsg.content += `\n\n❌ エラー: ${error.message}`;
+            showBanner(`❌ LLMとの通信に失敗しました: ${error.message}`, 'error');
+        }
+    } finally {
+        setGenerating(false);
+        renderChatMessages();
+        currentConversation.updatedAt = new Date().toISOString();
+        persistConversation(currentConversation);
+        renderLibrary();
+    }
+}
+
+function setGenerating(value) {
+    isGenerating = value;
+    document.getElementById('sendBtn').disabled = value;
+    document.getElementById('stopBtn').style.display = value ? 'inline-block' : 'none';
+}
+
+function stopGeneration() {
+    if (abortController) abortController.abort();
+}
+
+async function streamChat(profile, apiMessages, onDelta) {
+    abortController = new AbortController();
+    if (profile.apiType === 'ollama') {
+        const res = await fetch(`${profile.baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: profile.model, messages: apiMessages, stream: true }),
+            signal: abortController.signal,
+        });
+        if (!res.ok || !res.body) throw new Error('HTTP ' + res.status);
+        await readNdjsonStream(res.body, (obj) => {
+            if (obj.message && obj.message.content) onDelta(obj.message.content);
+        });
+    } else {
+        const headers = { 'Content-Type': 'application/json' };
+        if (profile.apiKey) headers.Authorization = `Bearer ${profile.apiKey}`;
+        const res = await fetch(`${profile.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ model: profile.model, messages: apiMessages, stream: true }),
+            signal: abortController.signal,
+        });
+        if (!res.ok || !res.body) throw new Error('HTTP ' + res.status);
+        await readSseStream(res.body, (obj) => {
+            const delta = obj.choices && obj.choices[0] && obj.choices[0].delta;
+            if (delta && delta.content) onDelta(delta.content);
+        });
+    }
+}
+
+async function readNdjsonStream(body, onObject) {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            try { onObject(JSON.parse(trimmed)); } catch (e) { /* 不完全な行は無視 */ }
+        }
+    }
+}
+
+async function readSseStream(body, onObject) {
+    const reader = body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) continue;
+            const payload = trimmed.slice(5).trim();
+            if (payload === '[DONE]') return;
+            try { onObject(JSON.parse(payload)); } catch (e) { /* 不完全な行は無視 */ }
+        }
+    }
+}
+
+/* ---------- Markdown化 & 保存 ---------- */
+
+function conversationTitle(conv) {
+    const firstUser = conv.messages.find(m => m.role === 'user');
+    if (!firstUser) return '無題の会話';
+    return firstUser.content.slice(0, 40) + (firstUser.content.length > 40 ? '…' : '');
+}
+
+function conversationToMarkdown(conv) {
+    const lines = [];
+    lines.push(`# ${conversationTitle(conv)}`);
+    lines.push('');
+    lines.push(`- スキル: ${conv.skillName}`);
+    lines.push(`- 使用LLM: ${conv.profileName}（モデル: ${conv.model}）`);
+    lines.push(`- 作成日時: ${formatDateTime(conv.createdAt)}`);
+    lines.push(`- 更新日時: ${formatDateTime(conv.updatedAt)}`);
+    lines.push('');
+    lines.push('---');
+    conv.messages.forEach(m => {
+        lines.push('');
+        lines.push(`## ${m.role === 'user' ? '🧑 User' : '🤖 Assistant'} (${formatDateTime(m.ts)})`);
+        lines.push('');
+        lines.push(m.content);
+    });
+    lines.push('');
+    return lines.join('\n');
+}
+
+function persistConversation(conv) {
+    if (!conv || conv.messages.length === 0) return;
+    conv.updatedAt = new Date().toISOString();
+    conv.title = conversationTitle(conv);
+    conv.markdown = conversationToMarkdown(conv);
+
+    const idx = conversations.findIndex(c => c.id === conv.id);
+    if (idx >= 0) conversations[idx] = { ...conv };
+    else conversations.push({ ...conv });
+
+    saveJSON(STORAGE_KEYS.conversations, conversations);
+}
+
+/* ---------- ライブラリ（保存済み会話一覧） ---------- */
+
+function renderLibrary() {
+    const el = document.getElementById('libraryContent');
+    if (conversations.length === 0) {
+        el.innerHTML = '<div class="empty-library">まだ保存された会話はありません。会話を始めると自動的にMarkdownで保存されます。</div>';
+        return;
+    }
+
+    const grouped = {};
+    conversations.forEach(c => {
+        if (!grouped[c.skillName]) grouped[c.skillName] = [];
+        grouped[c.skillName].push(c);
+    });
+
+    const skillOrder = skills.map(s => s.name).filter(name => grouped[name]);
+    Object.keys(grouped).forEach(name => { if (!skillOrder.includes(name)) skillOrder.push(name); });
+
+    el.innerHTML = skillOrder.map(skillName => {
+        const items = grouped[skillName].slice().sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+        return `
+        <div class="skill-group">
+            <div class="skill-group-title">🎯 ${escapeHtml(skillName)}（${items.length}件）</div>
+            <div class="conv-list">
+                ${items.map(c => `
+                    <div class="conv-item ${currentConversation && currentConversation.id === c.id ? 'current' : ''}">
+                        <div>
+                            <div class="conv-title">${escapeHtml(c.title || conversationTitle(c))}</div>
+                            <div class="conv-meta">${escapeHtml(c.profileName)}（${escapeHtml(c.model)}） ・ 更新: ${formatDateTime(c.updatedAt)}</div>
+                        </div>
+                        <div class="conv-actions">
+                            <button class="btn-secondary" onclick="openConversation('${c.id}')">開く</button>
+                            <button class="btn-success" onclick="downloadConversation('${c.id}')">.md保存</button>
+                            <button class="btn-danger" onclick="deleteConversation('${c.id}')">削除</button>
+                        </div>
+                    </div>`).join('')}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function openConversation(id) {
+    if (currentConversation && currentConversation.messages.length > 0 && currentConversation.id !== id) {
+        persistConversation(currentConversation);
+    }
+    const conv = conversations.find(c => c.id === id);
+    if (!conv) return;
+    currentConversation = JSON.parse(JSON.stringify(conv));
+
+    activeSkillName = currentConversation.skillName;
+    if (!skills.some(s => s.name === activeSkillName)) {
+        skills.push({ id: uid(), name: activeSkillName, systemPrompt: `あなたは${activeSkillName}に関する質問に答える専門アシスタントです。` });
+        saveJSON(STORAGE_KEYS.skills, skills);
+        renderSkillList();
+        renderSkillSelect();
+    }
+    document.getElementById('skillSelect').value = activeSkillName;
+    localStorage.setItem(STORAGE_KEYS.activeSkillName, activeSkillName);
+
+    if (currentConversation.profileId && getProfileById(currentConversation.profileId)) {
+        activeProfileId = currentConversation.profileId;
+        document.getElementById('profileSelect').value = activeProfileId;
+        localStorage.setItem(STORAGE_KEYS.activeProfileId, activeProfileId);
+        renderProfileList();
+    }
+
+    renderChatMessages();
+    renderLibrary();
+    showBanner(`📂 会話「${currentConversation.title}」を開きました`, 'info');
+}
+
+function downloadConversation(id) {
+    const conv = conversations.find(c => c.id === id);
+    if (!conv) return;
+    const blob = new Blob([conv.markdown || conversationToMarkdown(conv)], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeTitle = (conv.title || 'conversation').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40);
+    a.href = url;
+    a.download = `${conv.skillName}_${safeTitle}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function deleteConversation(id) {
+    conversations = conversations.filter(c => c.id !== id);
+    saveJSON(STORAGE_KEYS.conversations, conversations);
+    if (currentConversation && currentConversation.id === id) {
+        startNewConversation(true);
+    }
+    renderLibrary();
+}
+</script>
+
+</body>
+</html>
