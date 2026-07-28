@@ -286,7 +286,7 @@ async def health():
 
 
 @app.post("/safety-brief", response_model=SafetyBriefResponse)
-async def safety_brief(payload: SafetyBriefRequest):
+def safety_brief(payload: SafetyBriefRequest):
     start = time.monotonic()
     work_description = payload.work_description.strip()
 
