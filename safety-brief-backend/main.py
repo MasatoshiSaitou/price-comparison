@@ -239,7 +239,10 @@ def generate_safety_text(work_description: str, incidents: List[dict]):
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
         )
-        return response.content[0].text, False, False
+        text = "\n".join(
+            block.text for block in response.content if block.type == "text"
+        )
+        return text, False, False
     except Exception as exc:  # noqa: BLE001
         import anthropic
 
