@@ -14,7 +14,7 @@
   - モデルが読み込めない環境（オフライン等）では自動的にキーワード類似度に
     フォールバック
 - Claude API（Messages API）による安全ブリーフィング生成
-  - タイムアウト（5秒）時はフォールバック文言を **504** で返却
+  - タイムアウト（デフォルト25秒、`CLAUDE_TIMEOUT_SECONDS`で変更可）時はフォールバック文言を **504** で返却
   - `CLAUDE_API_KEY` 未設定時もフォールバック文言を返却（開発用）
 - CORS 有効化（スマホの Expo Go クライアントからの接続を想定）
 - 認証なし（開発時のみ）
@@ -57,6 +57,7 @@ $ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 | `API_HOST` | uvicorn 起動時のホスト | `0.0.0.0` |
 | `CLAUDE_MODEL` | 使用する Claude モデル ID | `claude-sonnet-5` |
 | `SENTENCE_MODEL_NAME` | 埋め込みに使う Sentence Transformers モデル | `paraphrase-multilingual-MiniLM-L12-v2` |
+| `CLAUDE_TIMEOUT_SECONDS` | Claude API呼び出しのタイムアウト秒数 | `25.0` |
 
 ## API
 
@@ -98,7 +99,7 @@ $ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 エラー:
 
 - `work_description` が空文字 → `400 Bad Request`
-- Claude API がタイムアウト（5秒） → `504`（フォールバック本文つき）
+- Claude API がタイムアウト（デフォルト25秒） → `504`（フォールバック本文つき）
 
 ## 動作確認
 

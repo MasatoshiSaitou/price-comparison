@@ -29,7 +29,7 @@ CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-5")
 SENTENCE_MODEL_NAME = os.getenv(
     "SENTENCE_MODEL_NAME", "paraphrase-multilingual-MiniLM-L12-v2"
 )
-CLAUDE_TIMEOUT_SECONDS = 5.0
+CLAUDE_TIMEOUT_SECONDS = float(os.getenv("CLAUDE_TIMEOUT_SECONDS", "25.0"))
 
 # --- logging: normal logs -> stdout, errors -> stderr -------------------
 
@@ -232,7 +232,9 @@ def generate_safety_text(work_description: str, incidents: List[dict]):
 
     prompt = build_prompt(work_description, incidents)
     try:
-        response = client.with_options(timeout=CLAUDE_TIMEOUT_SECONDS).messages.create(
+        response = client.with_options(
+            timeout=CLAUDE_TIMEOUT_SECONDS, max_retries=0
+        ).messages.create(
             model=CLAUDE_MODEL,
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],

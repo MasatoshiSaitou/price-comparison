@@ -41,7 +41,7 @@ def test_safety_brief_scaffold_assembly():
         "work_description": "足場の組立で高さ5mの作業",
         "facility_type": "建設現場",
     }
-    resp = requests.post(f"{BASE_URL}/safety-brief", json=payload, timeout=15)
+    resp = requests.post(f"{BASE_URL}/safety-brief", json=payload, timeout=40)
     print("  status_code:", resp.status_code)
     body = resp.json()
     print("  body:", body)
