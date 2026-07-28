@@ -34,3 +34,7 @@ npx expo start
 - バックエンド側の Windows ファイアウォールでポート8000への
   インバウンド接続を許可しておく必要があります
 - HTTP（非暗号化）通信のため、開発用ネットワーク以外では使用しないでください
+- Expo SDK は意図的に **54** に固定しています。Play Store / App Store の
+  Expo Go アプリが対応しているのが SDK 54 までのため（2026年半ば時点、
+  新しいSDKは審査待ち）。`npx expo install --fix` 等で最新版に上げると
+  「Project is incompatible with this version of Expo Go」エラーが再発します
