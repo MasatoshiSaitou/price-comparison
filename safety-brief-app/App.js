@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
+import * as Speech from 'expo-speech';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -14,6 +15,15 @@ import {
 
 const DEFAULT_API_BASE_URL = 'http://192.168.0.163:8000';
 
+// Claude's response is Markdown; strip the syntax so TTS doesn't read out
+// symbols like "#" or "**" literally.
+const toSpeechText = (markdown) =>
+  markdown
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/[*_`]/g, '')
+    .replace(/^-{3,}$/gm, '');
+
 export default function App() {
   const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_BASE_URL);
   const [workDescription, setWorkDescription] = useState('');
@@ -21,12 +31,19 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  useEffect(() => {
+    return () => Speech.stop();
+  }, []);
 
   const handleSubmit = async () => {
     if (!workDescription.trim()) {
       setError('作業内容を入力してください');
       return;
     }
+    Speech.stop();
+    setIsSpeaking(false);
     setLoading(true);
     setError('');
     setResult(null);
@@ -50,6 +67,21 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleToggleSpeak = () => {
+    if (isSpeaking) {
+      Speech.stop();
+      setIsSpeaking(false);
+      return;
+    }
+    setIsSpeaking(true);
+    Speech.speak(toSpeechText(result.text), {
+      language: 'ja-JP',
+      onDone: () => setIsSpeaking(false),
+      onStopped: () => setIsSpeaking(false),
+      onError: () => setIsSpeaking(false),
+    });
   };
 
   return (
@@ -100,7 +132,14 @@ export default function App() {
 
         {result ? (
           <View style={styles.resultBox}>
-            <Text style={styles.resultTitle}>安全ブリーフィング</Text>
+            <View style={styles.resultTitleRow}>
+              <Text style={styles.resultTitle}>安全ブリーフィング</Text>
+              <TouchableOpacity style={styles.speakButton} onPress={handleToggleSpeak}>
+                <Text style={styles.speakButtonText}>
+                  {isSpeaking ? '⏹ 停止' : '🔊 音声で聴く'}
+                </Text>
+              </TouchableOpacity>
+            </View>
             <Text style={styles.resultText}>{result.text}</Text>
 
             <Text style={styles.resultTitle}>類似災害事例（{result.incident_count}件）</Text>
@@ -176,6 +215,22 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 12,
     marginBottom: 6,
+  },
+  resultTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  speakButton: {
+    backgroundColor: '#eef4ff',
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  speakButtonText: {
+    color: '#1e6fd9',
+    fontSize: 13,
+    fontWeight: '600',
   },
   resultText: {
     fontSize: 15,
