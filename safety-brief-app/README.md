@@ -5,8 +5,8 @@
 （安全ブリーフィングと類似災害事例）を画面に表示します。
 
 Claudeの回答は `expo-speech`（端末内蔵の音声合成、Google Cloud TTSではありません）で
-読み上げ可能です。音声入力（マイク→テキスト化）はまだ実装していません
-（Expo Goでは動かせないネイティブモジュールが必要になるため、別フェーズで対応予定）。
+読み上げ可能です。音声入力（マイク→テキスト化）のコードは準備済みですが、
+**実機でのビルド・動作確認はまだ行っていません**（下記「音声入力（マイク）」参照）。
 
 ## セットアップ
 
@@ -50,6 +50,40 @@ Expo Goでは動かせないネイティブ音声認識と違い、この機能�
 
 `data/incidents.json` を更新する場合は、`safety-brief-backend/data/incident_db.json`
 をコピーしてください。
+
+## 音声入力（マイク） -- 準備済み・未ビルド
+
+`expo-speech-recognition`（Expo SDK 54対応版、`sdk-54` distタグ = 3.1.3）を
+組み込み済みです。「作業内容」欄の横に🎤ボタンがありますが、**Expo Goでは
+使用できないため、意図的に無効化（グレーアウト）されています**
+（`app.json`の設定プラグインがネイティブコードを追加するため、カスタム開発
+ビルドが必須。詳細はライブラリのREADMEの「Installation」参照）。
+
+次回、実機でマイク入力を試すための手順:
+
+1. [Expoアカウント](https://expo.dev/)を作成し、ログイン
+   ```bash
+   npx eas-cli login
+   ```
+2. プロジェクトをEASに登録（初回のみ）
+   ```bash
+   npx eas-cli build:configure
+   ```
+3. 開発ビルドを作成（Androidの場合。クラウドビルドのため10〜20分程度かかります）
+   ```bash
+   npx eas-cli build --profile development --platform android
+   ```
+4. ビルド完了後に案内されるURL/QRコードから、生成されたAPK
+   （**Expo Goとは別の専用アプリ**）をスマホにインストール
+5. 開発サーバーを起動し、インストールしたアプリから接続
+   ```bash
+   npx expo start --dev-client
+   ```
+6. 🎤ボタンが有効になっているはずなので、タップして動作確認
+   （マイク・音声認識の権限許可が求められます）
+
+`eas.json` に `development` / `preview` / `production` の3プロファイルを
+用意済みです。
 
 ## 注意
 

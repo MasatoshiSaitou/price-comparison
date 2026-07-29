@@ -17,6 +17,20 @@ import {
 import offlineIncidents from './data/incidents.json';
 import { buildOfflineBriefText, searchOfflineIncidents } from './lib/offlineSearch';
 
+// expo-speech-recognition requires a custom dev client build (see eas.json) --
+// it throws at import time when its native module isn't linked, which is the
+// case in plain Expo Go. Load it defensively with require() (catchable, unlike
+// a static import) so the rest of the app keeps working in Expo Go until then.
+let ExpoSpeechRecognitionModule = null;
+let useSpeechRecognitionEvent = () => {};
+try {
+  const speechRecognition = require('expo-speech-recognition');
+  ExpoSpeechRecognitionModule = speechRecognition.ExpoSpeechRecognitionModule;
+  useSpeechRecognitionEvent = speechRecognition.useSpeechRecognitionEvent;
+} catch {
+  // Not available in this environment (e.g. Expo Go) -- mic input stays disabled.
+}
+
 const DEFAULT_API_BASE_URL = 'http://192.168.0.163:8000';
 
 // Claude's response is Markdown; strip the syntax so TTS doesn't read out
@@ -37,10 +51,58 @@ export default function App() {
   const [error, setError] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [offlineMode, setOfflineMode] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [micAvailable, setMicAvailable] = useState(false);
 
   useEffect(() => {
     return () => Speech.stop();
   }, []);
+
+  useEffect(() => {
+    if (!ExpoSpeechRecognitionModule) {
+      setMicAvailable(false);
+      return;
+    }
+    try {
+      setMicAvailable(Boolean(ExpoSpeechRecognitionModule.isRecognitionAvailable()));
+    } catch {
+      setMicAvailable(false);
+    }
+  }, []);
+
+  useSpeechRecognitionEvent('start', () => setIsRecording(true));
+  useSpeechRecognitionEvent('end', () => setIsRecording(false));
+  useSpeechRecognitionEvent('result', (event) => {
+    const transcript = event.results?.[0]?.transcript;
+    if (transcript) setWorkDescription(transcript);
+  });
+  useSpeechRecognitionEvent('error', (event) => {
+    setIsRecording(false);
+    setError(`音声認識エラー: ${event.error} ${event.message || ''}`.trim());
+  });
+
+  const handleMicPress = async () => {
+    if (!ExpoSpeechRecognitionModule) return;
+    if (isRecording) {
+      ExpoSpeechRecognitionModule.stop();
+      return;
+    }
+    try {
+      const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!permission.granted) {
+        setError('マイクまたは音声認識の使用が許可されていません');
+        return;
+      }
+      setError('');
+      ExpoSpeechRecognitionModule.start({
+        lang: 'ja-JP',
+        interimResults: true,
+        continuous: false,
+      });
+    } catch (err) {
+      setError(`音声認識を開始できませんでした: ${err.message}`);
+    }
+  };
 
   const runOffline = () => {
     const matches = searchOfflineIncidents(workDescription, offlineIncidents, 5);
@@ -145,7 +207,23 @@ export default function App() {
           </>
         )}
 
-        <Text style={styles.label}>作業内容</Text>
+        <View style={styles.workDescriptionLabelRow}>
+          <Text style={styles.label}>作業内容</Text>
+          <TouchableOpacity
+            style={[styles.micButton, !micAvailable && styles.micButtonDisabled]}
+            onPress={handleMicPress}
+            disabled={!micAvailable}
+          >
+            <Text style={styles.micButtonText}>
+              {isRecording ? '⏹ 停止' : '🎤 音声入力'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        {!micAvailable && (
+          <Text style={styles.offlineHint}>
+            マイク入力はこの環境（Expo Go）では使用できません。カスタム開発ビルドが必要です。
+          </Text>
+        )}
         <TextInput
           style={[styles.input, styles.multiline]}
           value={workDescription}
@@ -288,6 +366,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   speakButtonText: {
+    color: '#1e6fd9',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  workDescriptionLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  micButton: {
+    backgroundColor: '#eef4ff',
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  micButtonDisabled: {
+    backgroundColor: '#f0f0f0',
+  },
+  micButtonText: {
     color: '#1e6fd9',
     fontSize: 13,
     fontWeight: '600',
