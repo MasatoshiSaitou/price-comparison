@@ -214,7 +214,9 @@ export default function App() {
             onPress={handleMicPress}
             disabled={!micAvailable}
           >
-            <Text style={styles.micButtonText}>
+            <Text
+              style={[styles.micButtonText, !micAvailable && styles.micButtonTextDisabled]}
+            >
               {isRecording ? '⏹ 停止' : '🎤 音声入力'}
             </Text>
           </TouchableOpacity>
@@ -389,6 +391,9 @@ const styles = StyleSheet.create({
     color: '#1e6fd9',
     fontSize: 13,
     fontWeight: '600',
+  },
+  micButtonTextDisabled: {
+    color: '#999',
   },
   resultText: {
     fontSize: 15,
