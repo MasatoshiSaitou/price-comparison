@@ -5,17 +5,20 @@
 ダウンロードした CSV / Excel ファイルを入力にとる。ネットワークアクセスは
 行わない（ダウンロードはあらかじめ手動で行っておくこと）。
 
-実行方法（このPCで、pandas / openpyxl をインストールした上で）:
-    pip install pandas openpyxl
-    python filter_incidents.py data/*.xlsx
+pandas は使わない（コンパイル済みバイナリが企業PCのアプリケーション制御
+ポリシーでブロックされる環境があったため）。CSV は標準ライブラリの csv、
+Excel は純Python実装の openpyxl のみを使う。
+
+実行方法:
+    pip install openpyxl
+    python filter_incidents.py "data/*.xlsx"
 
 出力: manufacturing_test_incidents.csv （抽出された事例の一覧）
 """
 
+import csv
 import glob
 import sys
-
-import pandas as pd
 
 # 職場のあんぜんサイトの労働災害（死傷）データベースの列順（22列固定）
 COLUMNS = [
@@ -46,14 +49,48 @@ COLUMNS = [
 TARGET_INDUSTRY = "製造業"
 KEYWORDS = ["試験", "実験", "開発", "測定"]
 
+HEADER_ROWS_TO_SKIP = 2
 
-def load_file(path):
+
+def load_csv_rows(path):
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        reader = csv.reader(f)
+        rows = list(reader)
+    return rows[HEADER_ROWS_TO_SKIP:]
+
+
+def load_xlsx_rows(path):
+    try:
+        from openpyxl import load_workbook
+    except ImportError as exc:
+        raise RuntimeError(
+            "openpyxl がインストールされていません。`pip install openpyxl` を実行してください。"
+        ) from exc
+
+    wb = load_workbook(path, read_only=True, data_only=True)
+    ws = wb.active
+    rows = []
+    for i, row in enumerate(ws.iter_rows(values_only=True)):
+        if i < HEADER_ROWS_TO_SKIP:
+            continue
+        rows.append(["" if v is None else str(v) for v in row])
+    wb.close()
+    return rows
+
+
+def load_rows(path):
     if path.lower().endswith(".csv"):
-        df = pd.read_csv(path, skiprows=2, header=None, encoding="utf-8", dtype=str)
-    else:
-        df = pd.read_excel(path, skiprows=2, header=None, dtype=str)
-    df.columns = COLUMNS[: len(df.columns)]
-    return df
+        return load_csv_rows(path)
+    return load_xlsx_rows(path)
+
+
+def to_records(rows):
+    records = []
+    for row in rows:
+        if len(row) < len(COLUMNS):
+            continue
+        records.append(dict(zip(COLUMNS, row)))
+    return records
 
 
 def main(paths):
@@ -66,30 +103,36 @@ def main(paths):
         matched = glob.glob(p)
         expanded_paths.extend(matched if matched else [p])
 
-    frames = []
+    all_records = []
     for path in expanded_paths:
         try:
-            frames.append(load_file(path))
-            print(f"読み込み成功: {path}")
+            rows = load_rows(path)
+            records = to_records(rows)
+            all_records.extend(records)
+            print(f"読み込み成功: {path} ({len(records)}件)")
         except Exception as exc:  # noqa: BLE001
             print(f"スキップ: {path} ({exc})")
 
-    if not frames:
+    if not all_records:
         print("読み込めるファイルがありませんでした。")
         return
 
-    all_df = pd.concat(frames, ignore_index=True)
+    manufacturing = [r for r in all_records if r.get("industry_major_name") == TARGET_INDUSTRY]
+    matched = [
+        r
+        for r in manufacturing
+        if any(keyword in (r.get("description") or "") for keyword in KEYWORDS)
+    ]
 
-    manufacturing = all_df[all_df["industry_major_name"] == TARGET_INDUSTRY]
-    pattern = "|".join(KEYWORDS)
-    matched = manufacturing[manufacturing["description"].str.contains(pattern, na=False)]
-
-    print(f"\n読み込んだ全件数: {len(all_df)}")
+    print(f"\n読み込んだ全件数: {len(all_records)}")
     print(f"製造業: {len(manufacturing)}件")
     print(f"うちキーワード（{'/'.join(KEYWORDS)}）一致: {len(matched)}件")
 
     output_path = "manufacturing_test_incidents.csv"
-    matched.to_csv(output_path, index=False, encoding="utf-8-sig")
+    with open(output_path, "w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=COLUMNS)
+        writer.writeheader()
+        writer.writerows(matched)
     print(f"-> {output_path} に出力しました")
 
 
