@@ -4,12 +4,14 @@
 Claude に安全ブリーフィングを生成させる REST API。
 """
 
+import json
 import logging
 import os
 import sys
 import time
 from datetime import datetime
 from difflib import SequenceMatcher
+from pathlib import Path
 from typing import List, Optional
 
 import numpy as np
@@ -52,9 +54,11 @@ _stderr_handler.setLevel(logging.WARNING)
 logger.addHandler(_stdout_handler)
 logger.addHandler(_stderr_handler)
 
-# --- ダミー災害DB --------------------------------------------------------
+# --- 災害DB（外部ファイルがあれば実データを読み込み、無ければダミーDB） -----
 
-INCIDENT_DB = [
+INCIDENT_DB_PATH = Path(__file__).parent / "data" / "incident_db.json"
+
+_DUMMY_INCIDENT_DB = [
     {
         "date": "2023-12-15",
         "facility": "建設現場 A",
@@ -104,6 +108,22 @@ INCIDENT_DB = [
         "preventive": "解体手順書に基づく段階的な作業",
     },
 ]
+
+
+def _load_incident_db():
+    if INCIDENT_DB_PATH.exists():
+        try:
+            with open(INCIDENT_DB_PATH, encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list) and data:
+                logger.info("Loaded %d incidents from %s", len(data), INCIDENT_DB_PATH)
+                return data
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Failed to load %s, using dummy data: %s", INCIDENT_DB_PATH, exc)
+    return _DUMMY_INCIDENT_DB
+
+
+INCIDENT_DB = _load_incident_db()
 
 # --- 埋め込みモデル（遅延ロード、失敗時はキーワード類似度にフォールバック） --
 

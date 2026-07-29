@@ -9,7 +9,13 @@
 ## 現在の実装範囲
 
 - FastAPI による REST API（`/health`, `/safety-brief`）
-- ダミー災害DB（Python list、6件）に対する類似度検索
+- 災害DBに対する類似度検索
+  - `data/incident_db.json` があればそれを読み込み（`scripts/` の
+    データ抽出・変換スクリプトで、厚生労働省「職場のあんぜんサイト」の
+    労働災害（死傷）データベースから実データを生成可能。詳細は
+    `scripts/filter_incidents.py` / `scripts/classify_incidents.py` /
+    `scripts/build_incident_db.py` を参照）
+  - 無ければダミーDB（Python list、6件）にフォールバック
   - Sentence Transformers（`paraphrase-multilingual-MiniLM-L12-v2`）で埋め込み
   - モデルが読み込めない環境（オフライン等）では自動的にキーワード類似度に
     フォールバック
