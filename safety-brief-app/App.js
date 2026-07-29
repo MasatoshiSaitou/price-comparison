@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import * as Speech from 'expo-speech';
 import {
@@ -53,6 +53,7 @@ export default function App() {
   const [offlineMode, setOfflineMode] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [micAvailable, setMicAvailable] = useState(false);
+  const latestTranscriptRef = useRef('');
 
   useEffect(() => {
     return () => Speech.stop();
@@ -70,11 +71,25 @@ export default function App() {
     }
   }, []);
 
-  useSpeechRecognitionEvent('start', () => setIsRecording(true));
-  useSpeechRecognitionEvent('end', () => setIsRecording(false));
+  useSpeechRecognitionEvent('start', () => {
+    latestTranscriptRef.current = '';
+    setIsRecording(true);
+  });
+  useSpeechRecognitionEvent('end', () => {
+    setIsRecording(false);
+    // Speech ended (silence detected, or the user tapped stop) -- submit
+    // automatically instead of requiring a separate button tap.
+    const transcript = latestTranscriptRef.current;
+    if (transcript.trim()) {
+      submitBriefing(transcript);
+    }
+  });
   useSpeechRecognitionEvent('result', (event) => {
     const transcript = event.results?.[0]?.transcript;
-    if (transcript) setWorkDescription(transcript);
+    if (transcript) {
+      setWorkDescription(transcript);
+      latestTranscriptRef.current = transcript;
+    }
   });
   useSpeechRecognitionEvent('error', (event) => {
     setIsRecording(false);
@@ -104,10 +119,10 @@ export default function App() {
     }
   };
 
-  const runOffline = () => {
-    const matches = searchOfflineIncidents(workDescription, offlineIncidents, 5);
+  const runOffline = (description) => {
+    const matches = searchOfflineIncidents(description, offlineIncidents, 5);
     setResult({
-      text: buildOfflineBriefText(workDescription, matches),
+      text: buildOfflineBriefText(description, matches),
       incident_count: matches.length,
       incidents: matches.map((m) => ({
         date: m.date,
@@ -117,12 +132,12 @@ export default function App() {
     });
   };
 
-  const runOnline = async () => {
+  const runOnline = async (description) => {
     const response = await fetch(`${apiBaseUrl}/safety-brief`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        work_description: workDescription,
+        work_description: description,
         facility_type: facilityType || undefined,
       }),
     });
@@ -134,8 +149,11 @@ export default function App() {
     }
   };
 
-  const handleSubmit = async () => {
-    if (!workDescription.trim()) {
+  // Takes an explicit description rather than reading `workDescription` from
+  // closure -- called right after setWorkDescription() from the speech "end"
+  // event, where the state update hasn't necessarily flushed yet.
+  const submitBriefing = async (description) => {
+    if (!description.trim()) {
       setError('作業内容を入力してください');
       return;
     }
@@ -146,9 +164,9 @@ export default function App() {
     setResult(null);
     try {
       if (offlineMode) {
-        runOffline();
+        runOffline(description);
       } else {
-        await runOnline();
+        await runOnline(description);
       }
     } catch (err) {
       setError(`通信エラー: ${err.message}`);
@@ -156,6 +174,8 @@ export default function App() {
       setLoading(false);
     }
   };
+
+  const handleSubmit = () => submitBriefing(workDescription);
 
   const handleToggleSpeak = () => {
     if (isSpeaking) {
