@@ -7,7 +7,11 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "話した内容をテキストに変換するために音声認識を使用します。",
+        "NSMicrophoneUsageDescription": "作業内容を音声で入力するためにマイクを使用します。"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -15,7 +19,11 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.cbj75060.safetybriefapp"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -26,9 +34,16 @@
         {
           "microphonePermission": "作業内容を音声で入力するためにマイクを使用します。",
           "speechRecognitionPermission": "話した内容をテキストに変換するために音声認識を使用します。",
-          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "6e24e696-6b21-4e71-a6c4-ae517717d13e"
+      }
+    }
   }
 }
