@@ -9,6 +9,9 @@ safety-brief-backend の INCIDENT_DB 用 JSON データに変換するスクリ�
 - severity: 固定で "injury"（このデータベースは休業4日以上の事例のみのため）
 - preventive: Claude に、事故の型・起因物・災害状況から簡潔な再発防止策を
   生成させる（生成に失敗した事例のみ、汎用的な文言で代用）
+- industry_minor_name: 元データの列をそのまま引き継ぐ。社内事例を追加する
+  場合は、この列に社名（例: "トヨタ"）を手入力しておくと、main.py が
+  検索結果の上位に優先表示する（COMPANY_INCIDENT_TAGS 環境変数で設定）
 
 実行方法（safety-brief-backend の venv で。anthropic は既にインストール済み）:
     python build_incident_db.py manufacturing_test_incidents.csv
@@ -62,10 +65,16 @@ def to_work_type(row):
 
 
 def build_prompt(batch):
+    # Use the row's position in the full concatenated list as the
+    # correlation key, not the CSV's own "id" column: the source data is
+    # 36 monthly government export files concatenated together, and each
+    # file restarts its ID numbering at 1, so the same id string collides
+    # across months. Keying preventive_map by that id silently overwrote
+    # earlier entries with a later, unrelated incident's advice.
     lines = [
-        f"{row['id']}: 事故の型={row.get('accident_type_name', '')} / "
+        f"{uid}: 事故の型={row.get('accident_type_name', '')} / "
         f"起因物={to_work_type(row)} / 状況={row['description']}"
-        for row in batch
+        for uid, row in batch
     ]
     joined = "\n".join(lines)
     return (
@@ -106,18 +115,22 @@ def main(input_path):
     with open(input_path, encoding="utf-8-sig", newline="") as f:
         rows = list(csv.DictReader(f))
 
+    # Synthetic globally-unique id (see build_prompt's comment) -- do not
+    # use row["id"] for matching across the whole file.
+    indexed_rows = list(enumerate(rows))
+
     client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
 
     preventive_map = {}
-    for i in range(0, len(rows), BATCH_SIZE):
-        batch = rows[i : i + BATCH_SIZE]
+    for i in range(0, len(indexed_rows), BATCH_SIZE):
+        batch = indexed_rows[i : i + BATCH_SIZE]
         print(f"再発防止策を生成中: {i + 1}〜{i + len(batch)} / {len(rows)}件")
         preventive_map.update(generate_preventive_batch(client, batch))
 
     incidents = []
     missing_preventive = 0
-    for row in rows:
-        preventive = preventive_map.get(row["id"])
+    for uid, row in indexed_rows:
+        preventive = preventive_map.get(str(uid))
         if not preventive:
             missing_preventive += 1
             preventive = GENERIC_PREVENTIVE
@@ -129,6 +142,7 @@ def main(input_path):
                 "description": row["description"],
                 "severity": "injury",
                 "preventive": preventive,
+                "industry_minor_name": row.get("industry_minor_name", ""),
             }
         )
 

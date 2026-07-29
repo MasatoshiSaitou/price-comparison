@@ -54,6 +54,14 @@ export default function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [micAvailable, setMicAvailable] = useState(false);
   const latestTranscriptRef = useRef('');
+  // Full message history sent to /safety-chat (seeded from /safety-brief's
+  // prompt+text once an online briefing comes back). Only available in
+  // online mode -- offline mode never talks to Claude, so there's nothing
+  // to continue a conversation with.
+  const [chatHistory, setChatHistory] = useState([]);
+  const [followUpTurns, setFollowUpTurns] = useState([]);
+  const [followUpText, setFollowUpText] = useState('');
+  const [followUpLoading, setFollowUpLoading] = useState(false);
 
   useEffect(() => {
     return () => Speech.stop();
@@ -113,6 +121,19 @@ export default function App() {
         lang: 'ja-JP',
         interimResults: true,
         continuous: false,
+        // Android's defaults cut recognition off after a very short pause and
+        // bias toward short search-query-like phrases, which made anything
+        // but a single word get truncated. web_search is Google's recommended
+        // fix for that bias; the two silence-length extras give the user a
+        // couple of seconds to keep talking before recognition ends.
+        ...(Platform.OS === 'android' && {
+          androidIntentOptions: {
+            EXTRA_LANGUAGE_MODEL: 'web_search',
+            EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: 2500,
+            EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS: 2500,
+            EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS: 15000,
+          },
+        }),
       });
     } catch (err) {
       setError(`音声認識を開始できませんでした: ${err.message}`);
@@ -146,6 +167,38 @@ export default function App() {
       setError(`エラー (${response.status}): ${body.detail || JSON.stringify(body)}`);
     } else {
       setResult(body);
+      // Seed the chat history with the exact prompt Claude was given (incidents
+      // + work description) so follow-up questions have the same context.
+      setChatHistory([
+        { role: 'user', content: body.prompt },
+        { role: 'assistant', content: body.text },
+      ]);
+    }
+  };
+
+  const handleFollowUp = async () => {
+    const question = followUpText.trim();
+    if (!question) return;
+    setFollowUpLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`${apiBaseUrl}/safety-chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ history: chatHistory, message: question }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        setError(`エラー (${response.status}): ${body.detail || JSON.stringify(body)}`);
+      } else {
+        setChatHistory(body.history);
+        setFollowUpTurns((prev) => [...prev, { question, answer: body.reply }]);
+        setFollowUpText('');
+      }
+    } catch (err) {
+      setError(`通信エラー: ${err.message}`);
+    } finally {
+      setFollowUpLoading(false);
     }
   };
 
@@ -162,6 +215,9 @@ export default function App() {
     setLoading(true);
     setError('');
     setResult(null);
+    setChatHistory([]);
+    setFollowUpTurns([]);
+    setFollowUpText('');
     try {
       if (offlineMode) {
         runOffline(description);
@@ -293,6 +349,35 @@ export default function App() {
                 <Text style={styles.incidentText}>{incident.description}</Text>
               </View>
             ))}
+
+            {!offlineMode && chatHistory.length > 0 && (
+              <View style={styles.followUpSection}>
+                <Text style={styles.resultTitle}>追加で質問する</Text>
+                {followUpTurns.map((turn, index) => (
+                  <View key={index} style={styles.followUpTurn}>
+                    <Text style={styles.followUpQuestion}>Q. {turn.question}</Text>
+                    <Text style={styles.followUpAnswer}>{turn.answer}</Text>
+                  </View>
+                ))}
+                <TextInput
+                  style={styles.input}
+                  value={followUpText}
+                  onChangeText={setFollowUpText}
+                  placeholder="例: 保護具は何が必要ですか？"
+                />
+                <TouchableOpacity
+                  style={styles.button}
+                  onPress={handleFollowUp}
+                  disabled={followUpLoading}
+                >
+                  {followUpLoading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.buttonText}>質問する</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         ) : null}
       </ScrollView>
@@ -427,6 +512,25 @@ const styles = StyleSheet.create({
   },
   incidentText: {
     fontSize: 13,
+    color: '#333',
+  },
+  followUpSection: {
+    marginTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    paddingTop: 16,
+  },
+  followUpTurn: {
+    marginBottom: 12,
+  },
+  followUpQuestion: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  followUpAnswer: {
+    fontSize: 14,
+    lineHeight: 20,
     color: '#333',
   },
 });

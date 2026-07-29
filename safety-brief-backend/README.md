@@ -8,7 +8,7 @@
 
 ## 現在の実装範囲
 
-- FastAPI による REST API（`/health`, `/safety-brief`）
+- FastAPI による REST API（`/health`, `/safety-brief`, `/safety-chat`）
 - 災害DBに対する類似度検索
   - `data/incident_db.json` があればそれを読み込み（`scripts/` の
     データ抽出・変換スクリプトで、厚生労働省「職場のあんぜんサイト」の
@@ -88,6 +88,7 @@ PC（Precision 5820）がオフラインでも常時使えるようにしたい�
 | `CLAUDE_MODEL` | 使用する Claude モデル ID | `claude-sonnet-5` |
 | `SENTENCE_MODEL_NAME` | 埋め込みに使う Sentence Transformers モデル | `paraphrase-multilingual-MiniLM-L12-v2` |
 | `CLAUDE_TIMEOUT_SECONDS` | Claude API呼び出しのタイムアウト秒数 | `25.0` |
+| `COMPANY_INCIDENT_TAGS` | 検索結果の上位に優先表示する社内事例の目印（`industry_minor_name`列の値、カンマ区切りで複数可） | `トヨタ` |
 
 ## API
 
@@ -122,14 +123,77 @@ PC（Precision 5820）がオフラインでも常時使えるようにしたい�
       "description": "手すり未設置で転落",
       "severity": "fatal"
     }
-  ]
+  ],
+  "prompt": "【過去の類似災害事例】\n...【これからの作業】\n..."
 }
 ```
+
+`prompt` は Claude に実際に送った最初のメッセージ（類似事例＋作業内容）。
+`/safety-chat` で追加質問する際、会話履歴の1件目としてそのまま使う。
 
 エラー:
 
 - `work_description` が空文字 → `400 Bad Request`
 - Claude API がタイムアウト（デフォルト25秒） → `504`（フォールバック本文つき）
+
+### POST /safety-chat
+
+`/safety-brief` の結果に対する追加質問に答える。サーバー側はセッションを
+持たないステートレス設計で、クライアントが会話履歴を保持して毎回送り返す。
+
+リクエスト:
+
+```json
+{
+  "history": [
+    {"role": "user", "content": "（/safety-briefのpromptをそのまま）"},
+    {"role": "assistant", "content": "（/safety-briefのtextをそのまま）"}
+  ],
+  "message": "保護具は何が必要ですか？"
+}
+```
+
+レスポンス（200）:
+
+```json
+{
+  "reply": "フルハーネス型安全帯と保護メガネが必要です。",
+  "history": [
+    {"role": "user", "content": "..."},
+    {"role": "assistant", "content": "..."},
+    {"role": "user", "content": "保護具は何が必要ですか？"},
+    {"role": "assistant", "content": "フルハーネス型安全帯と保護メガネが必要です。"}
+  ]
+}
+```
+
+返ってきた `history` をそのまま次回の `history` として送り返せば、会話が続く。
+
+エラー:
+
+- `message` が空文字 → `400 Bad Request`
+
+## 社内の災害事例を追加する
+
+国の実データと同じ仕組みで追加できる。
+
+1. `safety-brief-backend/manufacturing_test_incidents.csv` を開き、
+   `filter_incidents.py` が出力する22列の形式（詳細は
+   `scripts/filter_incidents.py` のヘッダー定義を参照）で新しい行を追加する
+2. `industry_minor_name` 列に社名（例: `トヨタ`）を入力する。この値が
+   `COMPANY_INCIDENT_TAGS`（デフォルト`トヨタ`）と一致する事例は、
+   検索結果の上位に優先表示される
+3. 再変換する
+   ```bash
+   cd scripts
+   python build_incident_db.py ../manufacturing_test_incidents.csv
+   mv incident_db.json ../data/incident_db.json
+   ```
+4. コミット・プッシュしてデプロイ先（Render）に反映する
+
+Renderはデプロイのたびにファイルシステムがリセットされるため、事例の追加は
+「ファイル編集→git push→再デプロイ」のサイクルが必要（アプリからその場で
+追加することはできない）。
 
 ## 動作確認
 

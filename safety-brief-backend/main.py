@@ -167,6 +167,20 @@ def _keyword_score(query: str, incident: dict) -> float:
     return SequenceMatcher(None, query, text).ratio()
 
 
+# 社内事例の目印。build_incident_db.py が元データの industry_minor_name を
+# そのまま引き継いでいるので、ここに社名（例: "トヨタ"）を手入力した行は
+# 自動的に社内事例として扱われ、検索結果の上位に優先表示される。
+COMPANY_INCIDENT_TAGS = {
+    tag.strip()
+    for tag in os.getenv("COMPANY_INCIDENT_TAGS", "トヨタ").split(",")
+    if tag.strip()
+}
+
+
+def _is_company_incident(incident: dict) -> bool:
+    return incident.get("industry_minor_name", "") in COMPANY_INCIDENT_TAGS
+
+
 def search_similar_incidents(work_description: str, top_k: int = 5) -> List[dict]:
     model = _get_embedding_model()
     if model is not None:
@@ -179,6 +193,8 @@ def search_similar_incidents(work_description: str, top_k: int = 5) -> List[dict
             ((inc, _keyword_score(work_description, inc)) for inc in INCIDENT_DB),
             key=lambda pair: -pair[1],
         )
+    # 社内事例（COMPANY_INCIDENT_TAGS）を優先表示。グループ内は関連度順を維持。
+    ranked = sorted(ranked, key=lambda pair: (not _is_company_incident(pair[0]), -pair[1]))
     return [inc for inc, _score in ranked[:top_k]]
 
 
@@ -219,9 +235,11 @@ def build_prompt(work_description: str, incidents: List[dict]) -> str:
         f"{incidents_text}\n\n"
         "【これからの作業】\n"
         f"{work_description}\n\n"
-        "この作業に関する危険性と安全ポイントを、"
-        "実務的で簡潔（2分程度の長さ）に説明してください。"
-        "技術用語は説明付きで。"
+        "この作業の危険性と安全ポイントを、要点だけに絞って簡潔に説明してください。"
+        "目安は3〜5行、多くても200字程度です。箇条書きで構いません。"
+        "専門用語には短い補足を添えてください。"
+        "これは会話の最初の回答なので、詳細は後続の質問で答える前提で、"
+        "まず一番重要な点だけを伝えてください。"
     )
 
 
@@ -244,31 +262,34 @@ def build_fallback_text(work_description: str, incidents: List[dict]) -> str:
 def generate_safety_text(work_description: str, incidents: List[dict]):
     """Claude を呼び出して安全ブリーフィングを生成する。
 
-    戻り値: (text, is_fallback, is_timeout)
+    戻り値: (text, is_fallback, is_timeout, prompt)
+    prompt は /safety-chat での追加質問のために、最初のユーザーメッセージ
+    として会話履歴に含めておく必要があるため返す。
     """
+    prompt = build_prompt(work_description, incidents)
+
     client = _get_claude_client()
     if client is None:
-        return build_fallback_text(work_description, incidents), True, False
+        return build_fallback_text(work_description, incidents), True, False, prompt
 
-    prompt = build_prompt(work_description, incidents)
     try:
         response = client.with_options(
             timeout=CLAUDE_TIMEOUT_SECONDS, max_retries=0
         ).messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=1024,
+            max_tokens=400,
             messages=[{"role": "user", "content": prompt}],
         )
         text = "\n".join(
             block.text for block in response.content if block.type == "text"
         )
-        return text, False, False
+        return text, False, False, prompt
     except Exception as exc:  # noqa: BLE001
         import anthropic
 
         is_timeout = isinstance(exc, (anthropic.APITimeoutError, TimeoutError))
         logger.error("Claude API call failed (timeout=%s): %s", is_timeout, exc)
-        return build_fallback_text(work_description, incidents), True, is_timeout
+        return build_fallback_text(work_description, incidents), True, is_timeout, prompt
 
 
 # --- FastAPI アプリケーション ---------------------------------------------
@@ -299,10 +320,26 @@ class SafetyBriefResponse(BaseModel):
     text: str
     incident_count: int
     incidents: List[IncidentOut]
+    prompt: str
 
 
 class HealthResponse(BaseModel):
     status: str
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class SafetyChatRequest(BaseModel):
+    history: List[ChatMessage]
+    message: str
+
+
+class SafetyChatResponse(BaseModel):
+    reply: str
+    history: List[ChatMessage]
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -323,7 +360,7 @@ def safety_brief(payload: SafetyBriefRequest):
         )
 
     incidents = search_similar_incidents(work_description, top_k=5)
-    text, is_fallback, is_timeout = generate_safety_text(work_description, incidents)
+    text, is_fallback, is_timeout, prompt = generate_safety_text(work_description, incidents)
 
     response_body = SafetyBriefResponse(
         text=text,
@@ -336,6 +373,7 @@ def safety_brief(payload: SafetyBriefRequest):
             )
             for inc in incidents
         ],
+        prompt=prompt,
     )
 
     response_time = time.monotonic() - start
@@ -352,6 +390,51 @@ def safety_brief(payload: SafetyBriefRequest):
         return JSONResponse(status_code=504, content=response_body.model_dump())
 
     return response_body
+
+
+@app.post("/safety-chat", response_model=SafetyChatResponse)
+def safety_chat(payload: SafetyChatRequest):
+    """/safety-brief の結果に対する追加質問に答える。
+
+    クライアント側で会話履歴を保持し、そのまま送り返してもらう
+    ステートレスな設計（サーバー側にセッションを持たない）。
+    履歴の1件目は /safety-brief のレスポンスに含まれる `prompt`
+    （過去事例と作業内容を含む最初のユーザーメッセージ）を想定している。
+    """
+    message = payload.message.strip()
+    if not message:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "message must not be empty"},
+        )
+
+    messages = [{"role": m.role, "content": m.content} for m in payload.history]
+    messages.append({"role": "user", "content": message})
+
+    client = _get_claude_client()
+    if client is None:
+        reply = "Claude APIが利用できないため、追加の質問には対応できません。"
+    else:
+        try:
+            response = client.with_options(
+                timeout=CLAUDE_TIMEOUT_SECONDS, max_retries=0
+            ).messages.create(
+                model=CLAUDE_MODEL,
+                max_tokens=400,
+                messages=messages,
+            )
+            reply = "\n".join(
+                block.text for block in response.content if block.type == "text"
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Claude chat call failed: %s", exc)
+            reply = "回答の取得に失敗しました。もう一度お試しください。"
+
+    updated_history = payload.history + [
+        ChatMessage(role="user", content=message),
+        ChatMessage(role="assistant", content=reply),
+    ]
+    return SafetyChatResponse(reply=reply, history=updated_history)
 
 
 if __name__ == "__main__":
