@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: safety-brief-backend
+    runtime: python
+    plan: free
+    rootDir: safety-brief-backend
+    buildCommand: pip install -r requirements-cloud.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: CLAUDE_API_KEY
+        sync: false
+      - key: CLAUDE_MODEL
+        value: claude-sonnet-5
+      - key: LOG_LEVEL
+        value: INFO
+      - key: CLAUDE_TIMEOUT_SECONDS
+        value: "25.0"

@@ -53,6 +53,30 @@ $ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 スマホの Expo Go からは `http://[PC_IP]:8000/safety-brief` に POST してください
 （PCとスマホが同一 Wi-Fi 上にあることが必要です）。
 
+## クラウドデプロイ（PCを起動しておく必要をなくす）
+
+PC（Precision 5820）がオフラインでも常時使えるようにしたい場合、
+リポジトリ直下の `render.yaml` を使って [Render](https://render.com) に
+デプロイできます。
+
+1. Render にサインアップし、GitHub リポジトリを連携
+2. 「New Blueprint」からこのリポジトリを選択（`render.yaml` を自動検出）
+3. `CLAUDE_API_KEY` を環境変数として入力（`sync: false` のためダッシュボードで設定が必要）
+4. デプロイ完了後に発行される `https://xxxx.onrender.com` を、
+   Expo アプリの「バックエンドURL」欄に入力する
+
+**注意点:**
+
+- クラウド版は `requirements-cloud.txt` を使用し、`sentence-transformers` /
+  `torch` を含めていません（無料プランのメモリに収まらないため）。
+  埋め込みモデルが無い場合は自動でキーワード類似度検索にフォールバックする
+  設計なので、コード変更なしでそのまま動作します（精度はローカル版より
+  やや落ちます）
+- Render の無料プランは一定時間アクセスがないとスリープするため、
+  スリープ復帰後の初回リクエストは数十秒かかることがあります
+- HTTPS になるため、Expo アプリ側は `http://` ではなく `https://` の
+  URLを入力してください
+
 ## 環境変数（.env）
 
 | 変数名 | 説明 | デフォルト |
