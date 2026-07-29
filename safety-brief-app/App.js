@@ -7,11 +7,15 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+
+import offlineIncidents from './data/incidents.json';
+import { buildOfflineBriefText, searchOfflineIncidents } from './lib/offlineSearch';
 
 const DEFAULT_API_BASE_URL = 'http://192.168.0.163:8000';
 
@@ -32,10 +36,41 @@ export default function App() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [offlineMode, setOfflineMode] = useState(false);
 
   useEffect(() => {
     return () => Speech.stop();
   }, []);
+
+  const runOffline = () => {
+    const matches = searchOfflineIncidents(workDescription, offlineIncidents, 5);
+    setResult({
+      text: buildOfflineBriefText(workDescription, matches),
+      incident_count: matches.length,
+      incidents: matches.map((m) => ({
+        date: m.date,
+        description: m.description,
+        severity: m.severity,
+      })),
+    });
+  };
+
+  const runOnline = async () => {
+    const response = await fetch(`${apiBaseUrl}/safety-brief`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        work_description: workDescription,
+        facility_type: facilityType || undefined,
+      }),
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      setError(`エラー (${response.status}): ${body.detail || JSON.stringify(body)}`);
+    } else {
+      setResult(body);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!workDescription.trim()) {
@@ -48,19 +83,10 @@ export default function App() {
     setError('');
     setResult(null);
     try {
-      const response = await fetch(`${apiBaseUrl}/safety-brief`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          work_description: workDescription,
-          facility_type: facilityType || undefined,
-        }),
-      });
-      const body = await response.json();
-      if (!response.ok) {
-        setError(`エラー (${response.status}): ${body.detail || JSON.stringify(body)}`);
+      if (offlineMode) {
+        runOffline();
       } else {
-        setResult(body);
+        await runOnline();
       }
     } catch (err) {
       setError(`通信エラー: ${err.message}`);
@@ -93,15 +119,31 @@ export default function App() {
         <StatusBar style="auto" />
         <Text style={styles.title}>労働災害防止 安全ブリーフィング</Text>
 
-        <Text style={styles.label}>バックエンドURL</Text>
-        <TextInput
-          style={styles.input}
-          value={apiBaseUrl}
-          onChangeText={setApiBaseUrl}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder="http://192.168.x.x:8000"
-        />
+        <View style={styles.offlineRow}>
+          <View style={styles.offlineLabelBlock}>
+            <Text style={styles.label}>オフラインモード（サーバー不要）</Text>
+            <Text style={styles.offlineHint}>
+              {offlineMode
+                ? 'スマホ内蔵の84件の事例から検索します（Claudeによる生成なし）'
+                : 'バックエンドに接続してClaudeが安全ブリーフィングを生成します'}
+            </Text>
+          </View>
+          <Switch value={offlineMode} onValueChange={setOfflineMode} />
+        </View>
+
+        {!offlineMode && (
+          <>
+            <Text style={styles.label}>バックエンドURL</Text>
+            <TextInput
+              style={styles.input}
+              value={apiBaseUrl}
+              onChangeText={setApiBaseUrl}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="http://192.168.x.x:8000"
+            />
+          </>
+        )}
 
         <Text style={styles.label}>作業内容</Text>
         <TextInput
@@ -176,6 +218,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 12,
     marginBottom: 4,
+  },
+  offlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f7f7f9',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+  },
+  offlineLabelBlock: {
+    flex: 1,
+    marginRight: 12,
+  },
+  offlineHint: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
   },
   input: {
     borderWidth: 1,
